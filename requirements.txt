@@ -1,0 +1,1 @@
+yfinance\npandas\nnumpy\nnsepython\nrequests\nflask\ngunicorn\nmatplotlib\n
