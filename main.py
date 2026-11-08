@@ -5,12 +5,13 @@ from config import TOP_N,REPORT_DIR,MIN_MARKET_CAP_CR
 import data_sources as ds
 import technical_analysis as ta
 import scoring,report as rpt,notifier
+
 def run():
     os.makedirs(REPORT_DIR,exist_ok=True)
     print("[1/4] Fetching top gainers...")
     gainers=ds.get_top_gainers(limit=50)
     if gainers.empty:
-        print("[warn] Top gainers unavailable — fallback universe")
+        print("[warn] Top gainers unavailable - fallback universe")
         candidates=ds.get_universe_symbols();pct_changes={}
     else:
         symbol_col="symbol" if "symbol" in gainers.columns else gainers.columns[0]
@@ -37,9 +38,13 @@ def run():
     as_of=datetime.now().strftime("%Y-%m-%d %H:%M IST")
     md=rpt.build_markdown_report(ranked,as_of);tg=rpt.build_telegram_message(ranked,as_of)
     date_str=datetime.now().strftime("%Y-%m-%d")
-    with open(os.path.join(REPORT_DIR,f"report_{date_str}.md"),"w") as f:f.write(md)
-    with open(os.path.join(REPORT_DIR,"latest.json"),"w") as f:json.dump({"as_of":as_of,"results":ranked},f,default=str,indent=2)
+    with open(os.path.join(REPORT_DIR,f"report_{date_str}.md"),"w",encoding="utf-8") as f:
+        f.write(md)
+    with open(os.path.join(REPORT_DIR,"latest.json"),"w",encoding="utf-8") as f:
+        json.dump({"as_of":as_of,"results":ranked},f,default=str,indent=2,ensure_ascii=False)
     notifier.send_telegram(tg);notifier.send_email(f"Stock Screen {date_str}",md)
     print(f"Done. Report saved for {date_str}")
     return ranked
-if __name__=="__main__":run()
+
+if __name__=="__main__":
+    run()
