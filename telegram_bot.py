@@ -28,8 +28,8 @@ OFFSET = 0
 MENU = {
     "inline_keyboard": [
         [
-            {"text": "📊 Scan 250 stocks", "callback_data": "scan:250"},
-            {"text": "📈 Scan 500 stocks", "callback_data": "scan:500"},
+            {"text": "🚀 Fetch 250 stocks", "callback_data": "scan:250"},
+            {"text": "🚀 Fetch 500 stocks", "callback_data": "scan:500"},
         ],
         [
             {"text": "🔄 Refresh NSE", "callback_data": "refresh:nse"},
@@ -160,7 +160,7 @@ def show_menu(chat_id, greeting=True):
     text = (
         "<b>India Stock Radar Bot</b>\n"
         "Choose an action below. You can scan 250 or 500 stocks directly from Telegram.\n\n"
-        "Commands: /scan, /refresh_nse, /refresh_bse, /refresh_all, /status, /help"
+        "Commands: /fetch 250, /fetch 500, /scan 250, /refresh_nse, /refresh_bse, /refresh_all, /status, /help"
     ) if greeting else "Choose your scan size:"
     send_telegram(text, chat_id=chat_id, parse_mode="HTML", reply_markup=MENU)
 
@@ -254,7 +254,7 @@ def handle_message(message):
     command = parts[0].split("@", 1)[0].lower()
     if command in ("/start", "/help"):
         show_menu(chat_id, greeting=True)
-    elif command == "/scan":
+    elif command in ("/scan", "/fetch"):
         if len(parts) > 1:
             try:
                 _start_scan(chat_id, int(parts[1]))
@@ -310,6 +310,7 @@ def main():
     telegram_api("setMyCommands", {"commands": [
         {"command": "start", "description": "Open the stock radar menu"},
         {"command": "scan", "description": "Choose /scan 250 or /scan 500"},
+        {"command": "fetch", "description": "Fetch a 250- or 500-stock report"},
         {"command": "refresh_nse", "description": "Refresh NSE equity universe"},
         {"command": "refresh_bse", "description": "Refresh BSE equity universe"},
         {"command": "refresh_all", "description": "Refresh NSE and BSE"},
