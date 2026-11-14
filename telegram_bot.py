@@ -2,6 +2,7 @@
 import html
 import json
 import logging
+import math
 import os
 import threading
 import time
@@ -71,6 +72,8 @@ def _save_offset():
 def _pct(value):
     try:
         number = float(value)
+        if not math.isfinite(number):
+            return "⚪ n/a"
     except (TypeError, ValueError):
         return "⚪ n/a"
     return f"{'🟢' if number > 0 else '🔴' if number < 0 else '⚪'} {number:+.2f}%"
@@ -89,7 +92,10 @@ def _risk(value):
 
 def _money(value):
     try:
-        return f"₹{float(value):,.2f}"
+        number = float(value)
+        if not math.isfinite(number):
+            return "n/a"
+        return f"₹{number:,.2f}"
     except (TypeError, ValueError):
         return "n/a"
 
@@ -98,6 +104,7 @@ def _stock_card(row, rank):
     symbol = html.escape(str(row.get("symbol", "")))
     company = html.escape(str(row.get("company", "")))
     score = float(row.get("score", 0))
+    ret1 = _pct(row.get("change_1d_pct"))
     ret5 = _pct(row.get("ret5_pct"))
     ret20 = _pct(row.get("ret20_pct"))
     rvol = row.get("rvol")
@@ -108,7 +115,7 @@ def _stock_card(row, rank):
     return (
         f"<b>{rank}. {symbol} | {company}</b>\n"
         f"💰 <b>{_money(row.get('price'))}</b>  ·  ⭐ Score <b>{score:.1f}/100</b>\n"
-        f"📈 5D {ret5}   ·   20D {ret20}\n"
+        f"📊 1D {ret1}   ·   5D {ret5}   ·   20D {ret20}\n"
         f"🎯 Entry reference: {entry}\n"
         f"🛑 Stop reference: <b>{_money(row.get('stop_loss'))}</b>\n"
         f"🏁 Targets: T1 <b>{_money(row.get('target1'))}</b>  ·  T2 <b>{_money(row.get('target2'))}</b>\n"
@@ -261,8 +268,10 @@ def handle_message(message):
         _start_refresh(chat_id, "bse")
     elif command in ("/refresh_all", "/refresh"):
         _start_refresh(chat_id, "both")
-    elif command == "/status":
+    elif command in ("/status", "/universe"):
         send_telegram(_status_text(), chat_id=chat_id, parse_mode="HTML")
+    elif command == "/menu":
+        show_menu(chat_id, greeting=True)
     else:
         send_telegram("I did not recognise that command. Send /help for available controls.", chat_id=chat_id)
 
@@ -305,6 +314,8 @@ def main():
         {"command": "refresh_bse", "description": "Refresh BSE equity universe"},
         {"command": "refresh_all", "description": "Refresh NSE and BSE"},
         {"command": "status", "description": "Show cached exchange universe counts"},
+        {"command": "universe", "description": "Show cached exchange universe counts"},
+        {"command": "menu", "description": "Open scan and refresh buttons"},
         {"command": "help", "description": "Show bot controls"},
     ]})
     log.info("India Stock Radar Telegram worker started")
