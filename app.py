@@ -125,7 +125,7 @@ if df.empty:
     st.stop()
 
 # Do not force five names: exclude stale prices, thin turnover and extreme event gaps.
-eligible = df[(df["eligible"] == True) & (df["score"] >= min_score)].copy()
+eligible = df[(df["eligible"] == True) & (df["score"] >= min_score) & (df["setup_status"] == "Watchlist candidate")].copy()
 low = eligible[eligible["price"] <= 1000].sort_values("score", ascending=False).head(5)
 high = eligible[eligible["price"] > 1000].sort_values("score", ascending=False).head(5)
 excluded = int((~df["eligible"].astype(bool)).sum())
