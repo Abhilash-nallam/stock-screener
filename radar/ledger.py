@@ -36,9 +36,9 @@ def save_daily_picks(picks,histories,market_regime,path=LEDGER_PATH):
     path=Path(path); path.parent.mkdir(parents=True,exist_ok=True)
     ledger=_refresh(read_ledger(path),histories)
     if picks is not None and not picks.empty:
-        day=str(picks["data_date"].iloc[0]); rows=[]
+        rows=[]
         for _,r in picks.iterrows():
-            rows.append({"asof_date":day,"symbol":r.get("symbol"),"company":r.get("company"),
+            rows.append({"asof_date":str(r.get("data_date") or picks["data_date"].iloc[0]),"symbol":r.get("symbol"),"company":r.get("company"),
               "exchange":r.get("exchange"),"price":r.get("price"),"score":r.get("score"),
               "risk":r.get("risk"),"setup_status":r.get("setup_status"),"entry_low":r.get("entry_low"),
               "entry_high":r.get("entry_high"),"stop_loss":r.get("stop_loss"),"target1":r.get("target1"),
