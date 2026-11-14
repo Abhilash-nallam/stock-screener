@@ -17,14 +17,14 @@ class TelegramFormattingTests(unittest.TestCase):
 
     def test_stock_card_has_entry_stop_and_targets(self):
         row = {
-            "symbol": "TEST", "company": "Test Limited", "score": 82.5,
+            "symbol": "TEST", "company": "Test Limited", "exchange": "NSE", "score": 82.5,
             "price": 123.45, "ret5_pct": 2.2, "ret20_pct": -1.1,
             "entry_low": 121, "entry_high": 124, "stop_loss": 115,
             "target1": 140, "target2": 150, "risk": "Moderate",
             "rsi": 61, "rvol": 1.8, "setup_status": "Watchlist candidate",
         }
         card = _stock_card(row, 1)
-        for text in ("TEST", "₹123.45", "Entry reference", "Stop reference",
+        for text in ("TEST", "Test Limited", "NSE", "₹123.45", "Entry reference", "Stop reference",
                      "T1", "T2", "🔴", "🟢", "🟡"):
             self.assertIn(text, card)
 
