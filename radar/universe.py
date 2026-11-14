@@ -116,7 +116,7 @@ def fetch_bse_universe():
 
     response = session.get(
         BSE_EQUITY_API,
-        params={"Group": "", "Scripcode": "", "industry": "", "segment": "Equity", "status": "Active"},
+        params={"Group": "", "scripcode": "", "industry": "", "segment": "Equity", "status": "Active"},
         timeout=35,
     )
     response.raise_for_status()
