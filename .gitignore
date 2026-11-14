@@ -1,5 +1,7 @@
+# local secrets and runtime state
 .env
 .streamlit/secrets.toml
 __pycache__/
-*.pyc
+*.py[cod]
+.pytest_cache/
 data/
