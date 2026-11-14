@@ -38,3 +38,7 @@ Trend 22%, momentum 18%, Nifty-relative strength 15%, volume quality 10%, RSI 10
 
 ## Security
 The tracked .env file was removed from the recommendation-v2 branch. Deleting a file from the current tree does not erase credentials from Git history. Rotate any credential ever committed publicly and purge exposed secrets from the repository history.
+
+
+## Telegram alert behavior
+Telegram integration is outbound-only: the dashboard sends messages to the configured chat. The bot does not listen for or reply to incoming `/start` commands. Start the bot chat once in Telegram, configure root-level `TELEGRAM_BOT_TOKEN` and `TELEGRAM_CHAT_ID` in Streamlit Community Cloud Secrets, then use **Test Telegram connection** in the dashboard. The test button reports Telegram API errors without displaying the bot token.
