@@ -186,7 +186,22 @@ show_bucket("Top 5 · Price up to ₹1,000", low)
 show_bucket("Top 5 · Price above ₹1,000", high)
 
 st.subheader("Telegram alerts")
-if st.button("Send current shortlist to Telegram"):
+test_col, send_col = st.columns(2)
+with test_col:
+    if st.button("Test Telegram connection"):
+        try:
+            send_telegram(
+                "✅ India Stock Radar Telegram test successful. "
+                "Your dashboard can now send alerts to this chat."
+            )
+            st.success("Test message delivered. Check your Telegram chat.")
+        except Exception as exc:
+            st.error(f"Telegram test failed: {exc}")
+
+with send_col:
+    send_shortlist = st.button("Send current shortlist to Telegram")
+
+if send_shortlist:
     lines = [
         "INDIA STOCK RADAR — recommendation model v2",
         "Daily-close research only; verify fresh quotes, filings and risk before trading.",
