@@ -1,14 +1,13 @@
-"""Outbound Telegram delivery for the Streamlit dashboard."""
+"""Telegram Bot API helpers shared by Streamlit and the long-polling worker."""
 import os
 import requests
 from dotenv import load_dotenv
 
 load_dotenv()
-TIMEOUT_SECONDS = 20
+TIMEOUT_SECONDS = 25
 
 
 def _read_secret(name):
-    """Read local .env/environment first, then Streamlit's native secrets."""
     value = os.getenv(name, "").strip()
     if value:
         return value
@@ -19,38 +18,50 @@ def _read_secret(name):
         return ""
 
 
-def send_telegram(message):
+def telegram_token():
     token = _read_secret("TELEGRAM_BOT_TOKEN")
-    chat_id = _read_secret("TELEGRAM_CHAT_ID")
-    if not token or not chat_id:
-        missing = []
-        if not token:
-            missing.append("TELEGRAM_BOT_TOKEN")
-        if not chat_id:
-            missing.append("TELEGRAM_CHAT_ID")
-        raise RuntimeError(
-            "Telegram configuration missing: " + ", ".join(missing) +
-            ". Add these as root-level Streamlit Secrets and save/reboot the app."
-        )
+    if not token:
+        raise RuntimeError("TELEGRAM_BOT_TOKEN is missing from worker environment or Streamlit Secrets.")
+    return token
 
+
+def send_telegram(message, chat_id=None, parse_mode=None, reply_markup=None):
+    token = telegram_token()
+    target = str(chat_id or _read_secret("TELEGRAM_CHAT_ID")).strip()
+    if not target:
+        raise RuntimeError("TELEGRAM_CHAT_ID is missing.")
+    payload = {"chat_id": target, "text": str(message), "disable_web_page_preview": True}
+    if parse_mode:
+        payload["parse_mode"] = parse_mode
+    if reply_markup:
+        payload["reply_markup"] = reply_markup
     response = requests.post(
         f"https://api.telegram.org/bot{token}/sendMessage",
-        json={
-            "chat_id": chat_id,
-            "text": str(message),
-            "disable_web_page_preview": True,
-        },
+        json=payload,
         timeout=TIMEOUT_SECONDS,
     )
-
     try:
-        payload = response.json()
+        body = response.json()
     except ValueError:
-        payload = {}
-
-    if not response.ok or not isinstance(payload, dict) or not payload.get("ok"):
-        # Telegram's response contains a useful description; never expose the bot token.
-        description = payload.get("description", "Telegram returned an unexpected response") if isinstance(payload, dict) else "Invalid Telegram response"
+        body = {}
+    if not response.ok or not isinstance(body, dict) or not body.get("ok"):
+        description = body.get("description", "Unexpected Telegram response") if isinstance(body, dict) else "Invalid Telegram response"
         raise RuntimeError(f"Telegram send failed (HTTP {response.status_code}): {description}")
+    return body
 
-    return payload
+
+def telegram_api(method, payload=None, timeout=TIMEOUT_SECONDS):
+    token = telegram_token()
+    response = requests.post(
+        f"https://api.telegram.org/bot{token}/{method}",
+        json=payload or {},
+        timeout=timeout,
+    )
+    try:
+        body = response.json()
+    except ValueError:
+        body = {}
+    if not response.ok or not isinstance(body, dict) or not body.get("ok"):
+        description = body.get("description", "Unexpected Telegram response") if isinstance(body, dict) else "Invalid Telegram response"
+        raise RuntimeError(f"Telegram API {method} failed (HTTP {response.status_code}): {description}")
+    return body.get("result")
