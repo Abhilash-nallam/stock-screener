@@ -103,17 +103,24 @@ def _money(value):
 def _stock_card(row, rank):
     symbol = html.escape(str(row.get("symbol", "")))
     company = html.escape(str(row.get("company", "")))
+    exchange = html.escape(str(row.get("exchange", "NSE")).upper())
     score = float(row.get("score", 0))
     ret1 = _pct(row.get("change_1d_pct"))
     ret5 = _pct(row.get("ret5_pct"))
     ret20 = _pct(row.get("ret20_pct"))
-    rvol = row.get("rvol")
-    rvol_text = f"{float(rvol):.2f}x" if rvol is not None else "n/a"
-    rsi = row.get("rsi")
-    rsi_text = f"{float(rsi):.1f}" if rsi is not None else "n/a"
+    try:
+        rvol_value = float(row.get("rvol"))
+        rvol_text = f"{rvol_value:.2f}x" if math.isfinite(rvol_value) else "n/a"
+    except (TypeError, ValueError):
+        rvol_text = "n/a"
+    try:
+        rsi_value = float(row.get("rsi"))
+        rsi_text = f"{rsi_value:.1f}" if math.isfinite(rsi_value) else "n/a"
+    except (TypeError, ValueError):
+        rsi_text = "n/a"
     entry = f"{_money(row.get('entry_low'))} – {_money(row.get('entry_high'))}"
     return (
-        f"<b>{rank}. {symbol} | {company}</b>\n"
+        f"<b>{rank}. {symbol} | {company}</b> · <b>{exchange}</b>\n"
         f"💰 <b>{_money(row.get('price'))}</b>  ·  ⭐ Score <b>{score:.1f}/100</b>\n"
         f"📊 1D {ret1}   ·   5D {ret5}   ·   20D {ret20}\n"
         f"🎯 Entry reference: {entry}\n"
