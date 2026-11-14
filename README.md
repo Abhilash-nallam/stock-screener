@@ -1,78 +1,42 @@
-# NSE Stock Screener Automation
+# India Stock Radar — Free Data Edition
 
-A Python-based NSE-focused research screener that collects stock data, calculates fundamental and technical indicators, ranks candidates, creates reports, and can send optional Telegram/email alerts.
+## Important cost clarification
+Dhan's Trading API and Dhan's Data API are separate. Dhan's official support page says Trading API is free, while Data API (live market prices, historical intraday, daily data, market depth) costs ₹499 + applicable taxes/month. This free build does NOT call Dhan Data API. It uses Yahoo Finance through `yfinance` for daily OHLCV and public Google News RSS headlines. This source is unofficial, may be delayed/incomplete/rate-limited and is not suitable as a guaranteed real-time execution feed.
 
-> **Important:** This is a research tool, not investment advice or a guarantee of returns. Validate data and strategy performance before risking money.
-
-## Features
-- NSE top-gainer discovery with a fallback liquid-stock universe
-- Yahoo Finance price history and available company fundamentals
-- RSI, moving averages, volume spike and relative-strength indicators
-- Fundamental, valuation, technical, momentum and risk scoring
-- Top-five candidate report with illustrative entry/stop/target levels
-- Optional Telegram and Gmail notifications
-- Flask dashboard
-- Historical backtesting and synthetic-data self-test
-
-## Local setup
-
-Use Python 3.10 or newer.
-
-```bash
-python -m venv .venv
-# Windows:
+## Install (Windows)
+```bat
+py -m venv .venv
 .venv\Scripts\activate
-# macOS/Linux:
-source .venv/bin/activate
-
-python -m pip install -r requirements.txt
-python main.py
+pip install -r requirements.txt
+copy .env.example .env
+streamlit run app.py
 ```
+Add Telegram bot token and chat ID to `.env` only if you want alerts. No Dhan/Groww API key is required for free mode.
 
-Start the dashboard in another terminal:
+## Universe file
+Upload a broad CSV with columns:
+`symbol,company,exchange,sector,yahoo_symbol`
+Examples: `RELIANCE.NS`, `TCS.NS`, `INFY.NS`. The included CSV has only five demo rows, not a full-market universe. Verify ticker mappings, delisted symbols and BSE suffixes.
 
-```bash
-python dashboard.py
-```
+## Current ranking
+30% trend structure (EMA20/EMA50), 25% 5/20-day momentum, 20% relative volume, 10% RSI profile, 15% headline keyword sentiment. Missing relative volume is neutral. Headlines are simple keyword scoring and may be wrong; open the linked source and verify.
 
-Open http://localhost:5000.
+## Telegram
+Create a bot using Telegram BotFather, send it a message, obtain chat ID, and store both values in `.env`. Never share bot tokens in chat.
 
-## Backtesting
+## No automated trading
+The application only produces a research shortlist and optional Telegram alerts. It does not place orders. Scores are not calibrated probabilities. Validate performance prospectively before risking money.
 
-Run the no-network synthetic-data check:
 
-```bash
-python backtest.py --self-test
-```
+## Optional free broker account connections (read-only)
+You may connect both Dhan and Groww using their free Trading/portfolio APIs for holdings, positions and available funds/margin information. This does NOT unlock live market data.
+Add credentials to `.env`:
+- `DHAN_ACCESS_TOKEN`: Dhan individual access token
+- `GROWW_ACCESS_TOKEN`: Groww free-plan access token (Groww documents access-token expiry at 6:00 AM daily)
+Then use **Fetch Dhan + Groww holdings, positions and available funds** in the dashboard.
+The adapter calls only read-only endpoints:
+- Dhan: `GET /v2/holdings`, `GET /v2/positions`, `GET /v2/fundlimit`
+- Groww: `GET /v1/holdings/user`, `GET /v1/positions/user`, `GET /v1/margins/detail/user`
+No order placement, modification or cancellation is implemented.
 
-Run a historical test (requires internet and market-data availability):
-
-```bash
-python backtest.py --period 2y
-```
-
-The full-model historical score uses current fundamentals against past prices and therefore has look-ahead bias. Treat the technical-only results as the more meaningful test, and remember that even those results do not establish future profitability.
-
-## Optional notifications
-
-Set environment variables before running the screener:
-
-- `TELEGRAM_BOT_TOKEN`
-- `TELEGRAM_CHAT_ID`
-- `SMTP_EMAIL`
-- `SMTP_PASSWORD` (Gmail App Password)
-- `ALERT_EMAIL_TO`
-
-Never commit real credentials or a local `.env` file.
-
-## Deployment note
-
-The dashboard and daily screening job can be deployed as separate services. A file written by a scheduled job may not be visible to a separate web service on an ephemeral filesystem; use a shared persistent database/storage for a reliable hosted deployment.
-
-## Data and limitations
-
-- NSE scraping may fail or be rate-limited; a fallback stock universe is provided.
-- Yahoo Finance data coverage and availability vary by symbol.
-- Scoring weights are heuristic assumptions, not a validated predictive model.
-- Entry, stop-loss and target levels are illustrative calculations, not guaranteed execution prices.
-- Backtests should account for survivorship bias, slippage, brokerage, taxes and out-of-sample performance.
+Pricing caveat: Dhan Trading APIs are free; Dhan Data APIs cost ₹499 + GST/month. Groww's ₹0 Free Trial excludes Live Data and Backtesting APIs, but includes other APIs such as portfolio and orders. This project does not call paid market-data endpoints from either broker.

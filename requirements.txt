@@ -1,8 +1,8 @@
-yfinance
-pandas
-numpy
-nsepython
-requests
-flask
-gunicorn
-matplotlib
+streamlit>=1.40
+pandas>=2.2
+numpy>=1.26
+requests>=2.32
+python-dotenv>=1.0
+feedparser>=6.0
+plotly>=5.24
+yfinance>=0.2.54
