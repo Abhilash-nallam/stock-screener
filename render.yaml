@@ -1,9 +1,9 @@
 services:
   - type: worker
-    name: india-stock-radar-telegram
+    name: india-stock-radar-telegram-worker
     runtime: python
     branch: new
-    plan: 0.5c-512mb
+    plan: starter
     buildCommand: pip install -r requirements.txt
     startCommand: python -u telegram_bot.py
     envVars:
