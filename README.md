@@ -1,9 +1,25 @@
-# India Stock Radar — Free Data Edition
+# India Stock Radar — Recommendation Model v2
 
-## Important cost clarification
-Dhan's Trading API and Dhan's Data API are separate. Dhan's official support page says Trading API is free, while Data API (live market prices, historical intraday, daily data, market depth) costs ₹499 + applicable taxes/month. This free build does NOT call Dhan Data API. It uses Yahoo Finance through `yfinance` for daily OHLCV and public Google News RSS headlines. This source is unofficial, may be delayed/incomplete/rate-limited and is not suitable as a guaranteed real-time execution feed.
+## What changed
+- EMA20/EMA50 trend structure and EMA20 slope.
+- 5-, 20- and 60-session momentum, plus relative strength versus Nifty.
+- Relative volume based on the median of the prior 20 sessions; the score impact is capped.
+- RSI, ATR volatility, median traded value, gap size, Nifty regime and data age affect ranking and eligibility.
+- Candidate lists reject stale data (over five calendar days), median traded value below ₹1 crore/day and extreme gap-plus-volume anomalies.
+- ATR-based close-reference entry zone, stop and targets.
+- News sentiment can change the score by at most four points in either direction.
+- A local CSV ledger records picks and 5-/20-session forward close returns.
 
-## Install (Windows)
+## Important limitations
+This is a research shortlist, not a return guarantee, calibrated profit probability or order system. Market data comes from Yahoo Finance via yfinance, an unofficial source that can be delayed, incomplete, throttled or unavailable. The displayed prices and levels are based on the last daily close, not live quotes.
+
+No official delivery-volume, FII/DII, audited fundamental, or corporate-announcement feed is integrated. Missing information is not silently treated as bullish. Review primary filings and news independently. The filters may return fewer than five names in a price band.
+
+The forward ledger does not simulate intraday stop/target sequencing, brokerage, taxes, slippage, corporate actions or survivorship bias. It is a prospective monitoring aid, not proof of a profitable strategy. Validate out of sample before risking capital.
+
+Dhan/Groww connections are optional read-only portfolio panels; they do not provide quote scanning and no orders are placed. Store tokens in a local .env file only. Never commit credentials.
+
+## Install on Windows
 ```bat
 py -m venv .venv
 .venv\Scripts\activate
@@ -11,32 +27,14 @@ pip install -r requirements.txt
 copy .env.example .env
 streamlit run app.py
 ```
-Add Telegram bot token and chat ID to `.env` only if you want alerts. No Dhan/Groww API key is required for free mode.
 
-## Universe file
-Upload a broad CSV with columns:
-`symbol,company,exchange,sector,yahoo_symbol`
-Examples: `RELIANCE.NS`, `TCS.NS`, `INFY.NS`. The included CSV has only five demo rows, not a full-market universe. Verify ticker mappings, delisted symbols and BSE suffixes.
+Optional local environment variables: DHAN_ACCESS_TOKEN, GROWW_ACCESS_TOKEN, TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID.
 
-## Current ranking
-30% trend structure (EMA20/EMA50), 25% 5/20-day momentum, 20% relative volume, 10% RSI profile, 15% headline keyword sentiment. Missing relative volume is neutral. Headlines are simple keyword scoring and may be wrong; open the linked source and verify.
+## Universe CSV
+Required columns: symbol, company, exchange, sector, yahoo_symbol. Verify mappings, suspended/delisted names and BSE suffixes.
 
-## Telegram
-Create a bot using Telegram BotFather, send it a message, obtain chat ID, and store both values in `.env`. Never share bot tokens in chat.
+## Component weighting
+Trend 22%, momentum 18%, Nifty-relative strength 15%, volume quality 10%, RSI 10%, traded-value liquidity 10%, ATR volatility 10%, Nifty regime 5%. If relative strength is unavailable, available weights are normalized. Headline overlay is separate and capped at +/-4 points.
 
-## No automated trading
-The application only produces a research shortlist and optional Telegram alerts. It does not place orders. Scores are not calibrated probabilities. Validate performance prospectively before risking money.
-
-
-## Optional free broker account connections (read-only)
-You may connect both Dhan and Groww using their free Trading/portfolio APIs for holdings, positions and available funds/margin information. This does NOT unlock live market data.
-Add credentials to `.env`:
-- `DHAN_ACCESS_TOKEN`: Dhan individual access token
-- `GROWW_ACCESS_TOKEN`: Groww free-plan access token (Groww documents access-token expiry at 6:00 AM daily)
-Then use **Fetch Dhan + Groww holdings, positions and available funds** in the dashboard.
-The adapter calls only read-only endpoints:
-- Dhan: `GET /v2/holdings`, `GET /v2/positions`, `GET /v2/fundlimit`
-- Groww: `GET /v1/holdings/user`, `GET /v1/positions/user`, `GET /v1/margins/detail/user`
-No order placement, modification or cancellation is implemented.
-
-Pricing caveat: Dhan Trading APIs are free; Dhan Data APIs cost ₹499 + GST/month. Groww's ₹0 Free Trial excludes Live Data and Backtesting APIs, but includes other APIs such as portfolio and orders. This project does not call paid market-data endpoints from either broker.
+## Security
+The tracked .env file was removed from the recommendation-v2 branch. Deleting a file from the current tree does not erase credentials from Git history. Rotate any credential ever committed publicly and purge exposed secrets from the repository history.
