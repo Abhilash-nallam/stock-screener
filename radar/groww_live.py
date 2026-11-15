@@ -9,6 +9,7 @@ import hashlib
 import os
 import re
 import time
+import threading
 from zoneinfo import ZoneInfo
 
 import requests
@@ -16,6 +17,9 @@ import requests
 BASE_URL = "https://api.groww.in"
 IST = ZoneInfo("Asia/Kolkata")
 TIMEOUT = 12
+_RATE_LOCK = threading.Lock()
+_LAST_REQUEST_AT = 0.0
+MIN_REQUEST_INTERVAL = 0.105  # 10 requests/second maximum for Live Data
 
 
 class LiveDataUnavailable(RuntimeError):
@@ -87,6 +91,14 @@ class GrowwLiveClient:
         })
 
     def _get_payload(self, path, params, label):
+        global _LAST_REQUEST_AT
+        # Enforce the documented 10 requests/second live-data limit across
+        # bulk, quote and candle requests from this worker process.
+        with _RATE_LOCK:
+            delay = MIN_REQUEST_INTERVAL - (time.monotonic() - _LAST_REQUEST_AT)
+            if delay > 0:
+                time.sleep(delay)
+            _LAST_REQUEST_AT = time.monotonic()
         try:
             response = self.session.get(
                 f"{BASE_URL}{path}", params=params, timeout=TIMEOUT
