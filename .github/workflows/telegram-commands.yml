@@ -36,9 +36,6 @@ jobs:
     env:
       TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
       TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
-      GROWW_ACCESS_TOKEN: ${{ secrets.GROWW_ACCESS_TOKEN }}
-      GROWW_API_KEY: ${{ secrets.GROWW_API_KEY }}
-      GROWW_API_SECRET: ${{ secrets.GROWW_API_SECRET }}
       RADAR_COMMAND: ${{ inputs.command }}
       RADAR_STOCK_LIMIT: ${{ inputs.stock_limit }}
       PYTHONUNBUFFERED: "1"
