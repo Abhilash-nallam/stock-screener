@@ -1,4 +1,4 @@
-"""Long-polling Telegram control bot. Run as a separate, always-on worker."""
+"""Telegram stock-radar reporting and command interface."""
 import html
 import json
 import logging
@@ -9,6 +9,7 @@ import time
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
+import pandas as pd
 from dotenv import load_dotenv
 
 from radar.scan_service import refresh_exchange, refresh_both, run_scan, universe_status
@@ -80,14 +81,14 @@ def _pct(value):
 
 
 def _risk(value):
-    text = str(value or "Unknown")
-    if text.lower() == "high":
+    text_value = str(value or "Unknown")
+    if text_value.lower() == "high":
         return "🔴 High"
-    if text.lower() == "moderate":
+    if text_value.lower() == "moderate":
         return "🟡 Moderate"
-    if text.lower() == "controlled":
+    if text_value.lower() == "controlled":
         return "🟢 Controlled"
-    return "⚪ " + html.escape(text)
+    return "⚪ " + html.escape(text_value)
 
 
 def _money(value):
@@ -100,115 +101,179 @@ def _money(value):
         return "n/a"
 
 
+def _as_list(value):
+    return value if isinstance(value, (list, tuple)) else []
+
+
+def _headline_date(item):
+    published = str(item.get("published") or "")
+    return published[:10] if len(published) >= 10 and published[:4].isdigit() else "date n/a"
+
+
 def _stock_card(row, rank):
-    symbol = html.escape(str(row.get("symbol", "")))
-    company = html.escape(str(row.get("company", "")))
+    """Compact, labelled stock card that fits naturally in Telegram."""
+    symbol = html.escape(str(row.get("symbol", "—")))
+    company = html.escape(str(row.get("company", "—")))
     exchange = html.escape(str(row.get("exchange", "NSE")).upper())
-    score = float(row.get("score", 0))
-    ret1 = _pct(row.get("change_1d_pct"))
-    ret5 = _pct(row.get("ret5_pct"))
-    ret20 = _pct(row.get("ret20_pct"))
     try:
-        rvol_value = float(row.get("rvol"))
-        rvol_text = f"{rvol_value:.2f}x" if math.isfinite(rvol_value) else "n/a"
+        score_value = float(row.get("score", 0))
+        score = f"{score_value:.1f}/100" if math.isfinite(score_value) else "n/a"
     except (TypeError, ValueError):
-        rvol_text = "n/a"
-    try:
-        rsi_value = float(row.get("rsi"))
-        rsi_text = f"{rsi_value:.1f}" if math.isfinite(rsi_value) else "n/a"
-    except (TypeError, ValueError):
-        rsi_text = "n/a"
-    entry = f"{_money(row.get('entry_low'))} – {_money(row.get('entry_high'))}"
-    news = row.get("news") or []
-    news_line = ""
+        score = "n/a"
+
+    news = _as_list(row.get("news"))
+    flags = _as_list(row.get("news_flags"))
+    reasons = _as_list(row.get("reasons"))
+
+    lines = [
+        f"<b>{rank}. {symbol} — {company}</b> ({exchange})",
+        f"💰 <b>Last close:</b> {_money(row.get('price'))}   |   <b>Model rank:</b> {score}",
+        f"📈 <b>Change:</b> 1D {_pct(row.get('change_1d_pct'))}  ·  5D {_pct(row.get('ret5_pct'))}  ·  20D {_pct(row.get('ret20_pct'))}",
+        f"🎯 <b>Entry reference:</b> {_money(row.get('entry_low'))} – {_money(row.get('entry_high'))}",
+        f"🛑 <b>Stop reference:</b> {_money(row.get('stop_loss'))}",
+        f"🏁 <b>Targets:</b> T1 {_money(row.get('target1'))}  ·  T2 {_money(row.get('target2'))}",
+        f"⚠️ <b>Risk:</b> {_risk(row.get('risk'))}  |  <b>RSI:</b> {_money(row.get('rsi'))}  |  <b>Rel. volume:</b> {_money(row.get('rvol'))}x",
+        f"🧭 <b>Status:</b> {html.escape(str(row.get('setup_status', 'Not assessed')))}",
+    ]
+
+    if reasons:
+        reason_text = " • ".join(str(x) for x in reasons[:2])
+        lines.append(f"🔎 <b>Why ranked:</b> {html.escape(reason_text[:260])}")
+    if flags:
+        lines.append(f"🚩 <b>Risk flags:</b> {html.escape('; '.join(str(x) for x in flags)[:220])}")
     if news:
         top = news[0]
-        news_line = (
-            f"\\n📰 {html.escape(str(top.get('source', 'News')))}: "
-            f"{html.escape(str(top.get('title', ''))[:170])}"
-        )
-    news_flags = row.get("news_flags") or []
-    flag_line = f"\\n🚩 {html.escape('; '.join(news_flags)[:160])}" if news_flags else ""
+        source = html.escape(str(top.get("publisher") or top.get("source") or "News"))
+        title = html.escape(str(top.get("title") or "")[:180])
+        date = html.escape(_headline_date(top))
+        link = str(top.get("link") or "")
+        if link.startswith(("https://", "http://")):
+            lines.append(f"📰 <b>Relevant news ({date}):</b> <a href=\"{html.escape(link, quote=True)}\">{title}</a> · {source}")
+        else:
+            lines.append(f"📰 <b>Relevant news ({date}):</b> {title} · {source}")
+    return "\n".join(lines)
+
+
+def _benchmark_line(label, item):
     return (
-        f"<b>{rank}. {symbol} | {company}</b> · <b>{exchange}</b>\\n"
-        f"💰 <b>{_money(row.get('price'))}</b>  ·  ⭐ Score <b>{score:.1f}/100</b>\\n"
-        f"📊 1D {ret1}   ·   5D {ret5}   ·   20D {ret20}\\n"
-        f"🎯 Entry reference: {entry}\\n"
-        f"🛑 Stop reference: <b>{_money(row.get('stop_loss'))}</b>\\n"
-        f"🏁 Targets: T1 <b>{_money(row.get('target1'))}</b>  ·  T2 <b>{_money(row.get('target2'))}</b>\\n"
-        f"⚠️ Risk: {_risk(row.get('risk'))}  ·  RSI {rsi_text}  ·  Rel.Vol {rvol_text}{flag_line}{news_line}\\n"
-        f"🧭 Setup: {html.escape(str(row.get('setup_status', 'n/a')))}"
+        f"• <b>{html.escape(label)}:</b> "
+        f"1D {_pct(item.get('daily_pct'))}  |  "
+        f"5D {_pct(item.get('weekly_pct'))}  |  "
+        f"20D {_pct(item.get('monthly_pct'))}"
     )
 
 
+def _bucket_messages(title, rows):
+    """Build one readable price-band message; split safely before Telegram's limit."""
+    heading = f"<b>{title}</b>\n<i>Rank is a model score, not a probability of profit.</i>"
+    if rows.empty:
+        return [heading + "\n\n⚪ No stock in this price band passed all quality filters."]
+
+    messages = []
+    current = heading
+    for rank, (_, row) in enumerate(rows.iterrows(), 1):
+        card = _stock_card(row, rank)
+        proposed = current + "\n\n━━━━━━━━━━━━━━━━━━\n\n" + card
+        if len(proposed) > 3500 and current != heading:
+            messages.append(current)
+            current = heading + " (continued)"
+            proposed = current + "\n\n━━━━━━━━━━━━━━━━━━\n\n" + card
+        current = proposed
+    messages.append(current)
+    return messages
+
+
 def format_scan_messages(result):
-    market = result["market"]
+    """Format a scan as distinct, compact Telegram messages."""
+    market = result.get("market") or {}
     regime = str(market.get("regime", "unknown")).upper()
     regime_icon = "🟢" if regime == "BULLISH" else "🔴" if regime == "BEARISH" else "🟡"
     global_risk = str(market.get("global_risk", "unknown")).upper()
     global_icon = "🟢" if global_risk == "RISK_ON" else "🔴" if global_risk == "RISK_OFF" else "🟡"
-    date = html.escape(str(result.get("data_date") or "unavailable"))
-    header = (
-        "<b>🇮🇳 INDIA STOCK RADAR</b>\\n"
-        f"🗓 Data date: <b>{date}</b>\\n"
-        f"🇮🇳 Nifty: {regime_icon} <b>{html.escape(regime)}</b> · "
-        f"1D {_pct(market.get('nifty_change_1d'))} · 5D {_pct(market.get('nifty_change_5d'))}\\n"
-        f"🌍 Global risk: {global_icon} <b>{html.escape(global_risk)}</b> · "
-        f"{market.get('global_positive_count', 0)}/{market.get('global_count', 0)} global indices positive (5D)\\n"
-        f"🔎 Scan: {result['success_count']}/{result['selected_count']} usable histories "
-        f"({result.get('nse_selected', 0)} NSE + {result.get('bse_selected', 0)} BSE selected) · "
-        f"{result['candidate_count']} candidates passed filters\\n"
-        f"📰 Broad RSS/GDELT feeds: {result.get('news_count', 0)} headlines · "
-        f"{result.get('news_sources_working', 0)}/{result.get('news_sources_total', 0)} sources responding\\n"
-        "<i>Company-news searches are separately run for the leading 35 technical candidates.</i>\\n"
-        "<i>Daily-close research only. Levels are references, not live prices or orders.</i>"
+
+    data_date = html.escape(str(result.get("data_date") or "unavailable"))
+    selected = int(result.get("selected_count", 0) or 0)
+    usable = int(result.get("success_count", 0) or 0)
+    coverage = (100.0 * usable / selected) if selected else 0.0
+    header_lines = [
+        "<b>🇮🇳 INDIA STOCK RADAR — SCAN SUMMARY</b>",
+        f"🗓 <b>Price data through:</b> {data_date} (last available daily close)",
+        f"🇮🇳 <b>Nifty trend:</b> {regime_icon} {html.escape(regime)}",
+        f"   Last session: {_pct(market.get('nifty_change_1d'))}  |  5 sessions: {_pct(market.get('nifty_change_5d'))}",
+        f"🌍 <b>Global risk:</b> {global_icon} {html.escape(global_risk)} "
+        f"({market.get('global_positive_count', 0)}/{market.get('global_count', 0)} global indices positive over 5 sessions)",
+        f"🔎 <b>Universe scan:</b> {usable}/{selected} usable histories ({coverage:.1f}%)",
+        f"   Selected: {result.get('nse_selected', 0)} NSE + {result.get('bse_selected', 0)} BSE",
+        f"   Qualified watchlist candidates: {result.get('candidate_count', 0)}",
+        f"📰 <b>Broad news feeds:</b> {result.get('news_count', 0)} headlines · "
+        f"{result.get('news_sources_working', 0)}/{result.get('news_sources_total', 0)} sources responding",
+        "<i>Company searches are separately run for the leading 35 technical candidates.</i>",
+        "<i>Daily-close research only. These levels are reference zones, not live prices or orders.</i>",
+    ]
+    messages = ["\n".join(header_lines)]
+
+    benchmarks = market.get("benchmarks", {}) or {}
+    india_lines = ["<b>🇮🇳 INDIA MARKET</b>"]
+    india_lines.append(
+        f"• <b>NIFTY 50 trend:</b> {html.escape(regime)} · "
+        f"1D {_pct(market.get('nifty_change_1d'))} · 5D {_pct(market.get('nifty_change_5d'))}"
     )
-    messages = [header]
+    for key, label in (("SENSEX", "SENSEX"), ("INDIA_VIX", "India VIX")):
+        if key in benchmarks:
+            india_lines.append(_benchmark_line(label, benchmarks[key]))
 
-    benchmarks = market.get("benchmarks", {})
-    benchmark_lines = ["<b>🌍 GLOBAL & INDIA MACRO SNAPSHOT</b>"]
-    for name in ("SENSEX", "SP500", "NASDAQ", "DOW", "FTSE", "NIKKEI", "HANG_SENG", "INDIA_VIX", "USDINR", "BRENT", "GOLD"):
-        item = benchmarks.get(name)
-        if item:
-            label = name.replace("_", " ")
-            benchmark_lines.append(
-                f"• {html.escape(label)}: 1D {_pct(item.get('daily_pct'))} · 5D {_pct(item.get('weekly_pct'))} · 20D {_pct(item.get('monthly_pct'))}"
-            )
-    for title, key in (("Global headlines", "global_news"), ("Official India filings / policy", "official_news")):
-        items = result.get(key, [])[:6]
-        benchmark_lines.append(f"\\n<b>{title}</b>")
+    global_names = [
+        ("SP500", "S&P 500"), ("NASDAQ", "Nasdaq"), ("DOW", "Dow Jones"),
+        ("FTSE", "FTSE"), ("NIKKEI", "Nikkei"), ("HANG_SENG", "Hang Seng"),
+    ]
+    global_lines = ["<b>🌎 GLOBAL EQUITY MARKETS</b>"]
+    for key, label in global_names:
+        if key in benchmarks:
+            global_lines.append(_benchmark_line(label, benchmarks[key]))
+
+    macro_lines = ["<b>💹 MACRO WATCH</b>"]
+    for key, label in (("USDINR", "USD/INR"), ("BRENT", "Brent crude"), ("GOLD", "Gold")):
+        if key in benchmarks:
+            macro_lines.append(_benchmark_line(label, benchmarks[key]))
+
+    market_sections = india_lines + [""] + global_lines + [""] + macro_lines
+    messages.append("\n".join(market_sections))
+
+    headline_lines = ["<b>📰 RELEVANT NEWS & OFFICIAL UPDATES</b>"]
+    for title, key in (("Global market headlines", "global_news"),
+                       ("Indian exchange / regulator updates", "official_news")):
+        items = _as_list(result.get(key))[:5]
+        headline_lines.append(f"\n<b>{title}</b>")
         if not items:
-            benchmark_lines.append("<i>No recent items returned by the configured feeds.</i>")
+            headline_lines.append("⚪ No relevant headlines returned by the configured feeds.")
+            continue
         for item in items:
-            link = html.escape(str(item.get("link", "")), quote=True)
-            headline = html.escape(str(item.get("title", ""))[:190])
-            source = html.escape(str(item.get("publisher") or item.get("source") or ""))
-            benchmark_lines.append(f"• <a href=\"{link}\">{headline}</a> · {source}")
-    messages.append("\\n".join(benchmark_lines))
+            text = html.escape(str(item.get("title") or "")[:170])
+            source = html.escape(str(item.get("publisher") or item.get("source") or "Source"))
+            date = html.escape(_headline_date(item))
+            link = str(item.get("link") or "")
+            if link.startswith(("https://", "http://")):
+                headline_lines.append(f"• <a href=\"{html.escape(link, quote=True)}\">{text}</a> — {source} · {date}")
+            else:
+                headline_lines.append(f"• {text} — {source} · {date}")
+    messages.append("\n".join(headline_lines))
 
-    for title, key in [("🟢 TOP CANDIDATES · PRICE ≤ ₹1,000", "low"),
-                       ("🔵 TOP CANDIDATES · PRICE > ₹1,000", "high")]:
-        rows = result[key]
-        parts = [f"<b>{title}</b>"]
-        if rows.empty:
-            parts.append("<i>No stock in this price band passed the filters.</i>")
-        else:
-            for rank, (_, row) in enumerate(rows.iterrows(), 1):
-                parts.append(_stock_card(row, rank))
-        messages.append("\\n\\n".join(parts))
+    messages.extend(_bucket_messages("🟢 TOP CANDIDATES — PRICE ≤ ₹1,000", result["low"]))
+    messages.extend(_bucket_messages("🔵 TOP CANDIDATES — PRICE > ₹1,000", result["high"]))
     messages.append(
-        "<i>🟢/🔴 mark positive/negative percentage moves. Headline signals are keyword-based evidence, "
-        "not an interpretation of the full article. Verify filings and fresh quotes independently.</i>"
+        "<i>🟢/🔴 show positive/negative moves. Headline sentiment is keyword-based and is not a full-article interpretation. "
+        "A higher model rank does not guarantee a price rise; confirm the latest quote, liquidity and risk before acting.</i>"
     )
     return messages
 
+
 def show_menu(chat_id, greeting=True):
-    text = (
+    message = (
         "<b>India Stock Radar Bot</b>\n"
-        "Choose an action below. You can scan 250 or 500 stocks directly from Telegram.\n\n"
-        "Commands: /fetch 250, /fetch 500, /scan 250, /refresh_nse, /refresh_bse, /refresh_all, /status, /help"
+        "Choose an action below. Scans run on GitHub Actions and return here.\n\n"
+        "Commands: /fetch 250, /fetch 500, /refresh_nse, /refresh_bse, /refresh_all, /status, /help"
     ) if greeting else "Choose your scan size:"
-    send_telegram(text, chat_id=chat_id, parse_mode="HTML", reply_markup=MENU)
+    send_telegram(message, chat_id=chat_id, parse_mode="HTML", reply_markup=MENU)
 
 
 def _start_scan(chat_id, limit):
@@ -315,7 +380,7 @@ def handle_message(message):
     elif command in ("/refresh_all", "/refresh"):
         _start_refresh(chat_id, "both")
     elif command in ("/status", "/universe"):
-        send_telegram(_status_text(), chat_id=chat_id, parse_mode="HTML")
+        send_telegram(_status_text(), chat_id=chat_id)
     elif command == "/menu":
         show_menu(chat_id, greeting=True)
     else:
@@ -342,7 +407,7 @@ def handle_callback(callback):
     elif data.startswith("refresh:"):
         _start_refresh(chat_id, data.split(":", 1)[1])
     elif data == "status":
-        send_telegram(_status_text(), chat_id=chat_id, parse_mode="HTML")
+        send_telegram(_status_text(), chat_id=chat_id)
     elif data == "help":
         show_menu(chat_id, greeting=True)
 
@@ -351,7 +416,7 @@ def main():
     if not _read_secret("TELEGRAM_CHAT_ID"):
         raise RuntimeError("Set TELEGRAM_CHAT_ID to your own private Telegram chat ID before starting the bot.")
     _load_offset()
-    # This worker uses long polling; remove any webhook left over from a previous setup.
+    # Long-polling worker only; the Cloudflare webhook deployment is separate.
     telegram_api("deleteWebhook", {"drop_pending_updates": False})
     telegram_api("setMyCommands", {"commands": [
         {"command": "start", "description": "Open the stock radar menu"},
