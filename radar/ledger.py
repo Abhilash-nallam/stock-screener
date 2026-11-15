@@ -19,8 +19,11 @@ def _refresh(ledger,histories):
     for idx,row in ledger.iterrows():
         exchange = str(row.get("exchange", "")).upper()
         symbol = str(row.get("symbol", ""))
-        h = (histories or {}).get(f"{exchange}:{symbol}")
-        if h is None:
+        h = (histories or {}).get(f"{exchange}:{symbol}") if exchange else None
+        # A symbol-only legacy history is safe only when the ledger row has no
+        # exchange identity. Never substitute another exchange's history when
+        # an NSE/BSE-specific entry is missing.
+        if h is None and not exchange:
             h = (histories or {}).get(symbol)
         if h is None or h.empty:
             continue
