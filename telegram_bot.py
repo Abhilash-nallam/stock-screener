@@ -141,7 +141,7 @@ def _stock_card(row, rank):
         f"📈 <b>Today vs prior close:</b> {_pct(row.get('live_change_pct'))}  ·  Opening gap: {_pct(row.get('live_gap_pct'))}  ·  From open: {_pct(row.get('live_intraday_pct'))}",
         f"🧭 <b>Intraday:</b> VWAP {_money(row.get('live_vwap'))} ({_pct(row.get('live_vwap_distance_pct'))})  ·  3-bar 5m momentum {_pct(row.get('live_5m_momentum_pct'))}",
         f"🌐 <b>Relative to Nifty:</b> {_pct(row.get('live_relative_strength_pct'))}  ·  5D {_pct(row.get('ret5_pct'))}  ·  20D {_pct(row.get('ret20_pct'))}",
-        f"🎯 <b>Reference entry zone:</b> {_money(row.get('live_entry_low'))} – {_money(row.get('live_entry_high'))}",
+        f"🎯 <b>Entry zone (reference):</b> {_money(row.get('live_entry_low'))} – {_money(row.get('live_entry_high'))}",
         f"🛑 <b>Stop reference:</b> {_money(row.get('live_stop'))}  ·  🏁 <b>Targets:</b> T1 {_money(row.get('live_target1'))}  ·  T2 {_money(row.get('live_target2'))}",
         f"⚠️ <b>Risk:</b> {_risk(row.get('risk'))}  ·  RSI {_number(row.get('rsi'))}  ·  ATR {_number(row.get('atr_pct'), 2)}%",
         f"🟢 <b>Decision:</b> {live_status}",
