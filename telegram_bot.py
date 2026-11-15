@@ -224,9 +224,19 @@ def format_scan_messages(result):
     usable = int(result.get("success_count", 0) or 0)
     daily_coverage = (100.0 * usable / selected) if selected else 0.0
     breadth = result.get("live_breadth") or {}
+    nse_count = int(result.get("nse_universe_count", 0) or 0)
     bse_count = int(result.get("bse_universe_count", 0) or 0)
+    nse_error = result.get("nse_refresh_error")
     bse_error = result.get("bse_refresh_error")
-    if bse_count:
+    if nse_error and nse_count:
+        nse_cache_line = f"⚠️ <b>NSE cache:</b> using previous cached list ({nse_count:,}); refresh failed: {html.escape(str(nse_error)[:160])}"
+    elif nse_count:
+        nse_cache_line = f"📚 <b>NSE universe cache:</b> {nse_count:,} securities"
+    else:
+        nse_cache_line = "⚠️ <b>NSE universe unavailable:</b> use /refresh_nse."
+    if bse_error and bse_count:
+        bse_cache_line = f"⚠️ <b>BSE cache:</b> using previous cached list ({bse_count:,}); refresh failed: {html.escape(str(bse_error)[:160])} · Retry /refresh_bse."
+    elif bse_count:
         bse_cache_line = f"🏛 <b>BSE universe cache:</b> {bse_count:,} securities loaded; BSE-only tickers are included in the rotating scan."
     elif bse_error:
         bse_cache_line = "⚠️ <b>BSE universe unavailable:</b> " + html.escape(str(bse_error)[:220]) + " · Retry with /refresh_bse."
@@ -246,7 +256,7 @@ def format_scan_messages(result):
         f"({market.get('global_positive_count', 0)}/{market.get('global_count', 0)} global indices positive over 5 sessions)",
         f"🔎 <b>Daily universe:</b> {usable}/{selected} usable histories ({daily_coverage:.1f}%) · "
         f"{result.get('nse_selected', 0)} NSE + {result.get('bse_selected', 0)} BSE selected",
-        f"📚 <b>NSE universe cache:</b> {int(result.get('nse_universe_count', 0) or 0):,} securities",
+        nse_cache_line,
         bse_cache_line,
         "✅ <b>Exchange scope:</b> NSE .NS and BSE .BO symbols are both supported; actual intraday availability varies by symbol.",
         f"🧪 <b>Intraday checks:</b> {result.get('live_researched_count', 0)} leaders researched · "
