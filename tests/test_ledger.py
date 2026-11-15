@@ -34,6 +34,12 @@ class ForwardTestLedgerTests(unittest.TestCase):
         self.assertEqual(values["NSE"], 10.0)
         self.assertEqual(values["BSE"], -10.0)
 
+    def test_missing_exchange_history_does_not_fall_back_to_other_exchange(self):
+        # If NSE:ABC is absent, BSE:ABC must not be used for the NSE ledger row.
+        ledger = self.ledger.iloc[[0]].copy()
+        refreshed = _refresh(ledger, {"BSE:ABC": self.bse, "ABC": self.bse})
+        self.assertTrue(pd.isna(refreshed.iloc[0]["return_5d_pct"]))
+
     def test_save_does_not_deduplicate_same_symbol_across_exchanges(self):
         picks = pd.DataFrame([
             {"data_date": str(self.dates[0].date()), "symbol": "ABC", "company": "Alpha",
