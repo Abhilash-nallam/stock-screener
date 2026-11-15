@@ -1,6 +1,7 @@
 """NSE/BSE equity universes, refresh helpers and cached selection."""
 import io
 import json
+import zipfile
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -9,12 +10,13 @@ import requests
 
 NSE_EQUITY_CSV = "https://nsearchives.nseindia.com/content/equities/EQUITY_L.csv"
 BSE_EQUITY_API = "https://api.bseindia.com/BseIndiaAPI/api/ListofScripData/w"
+BSE_SCRIP_ZIP = "https://www.bseindia.com/downloads/Help/file/scrip.zip"
 DATA_DIR = Path("data")
 NSE_CACHE = DATA_DIR / "nse_equity_universe.csv"
 BSE_CACHE = DATA_DIR / "bse_equity_universe.csv"
 REFRESH_META = DATA_DIR / "universe_refresh.json"
 
-USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/122 Safari/537.36"
+USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/153.0.0.0 Safari/537.36"
 
 
 def _record_refresh(exchange, count):
@@ -96,45 +98,28 @@ def _extract_bse_rows(payload):
     raise ValueError("BSE response did not contain a recognised securities list")
 
 
-def fetch_bse_universe():
-    """Refresh active BSE equity scrips from BSE's public listed-scrip endpoint.
-
-    BSE scrip codes are mapped to Yahoo Finance .BO daily tickers. The public
-    endpoint is not a guaranteed data service and may change or rate-limit.
-    """
-    session = requests.Session()
-    session.headers.update({
-        "User-Agent": USER_AGENT,
-        "Accept": "application/json,text/plain,*/*",
-        "Referer": "https://www.bseindia.com/",
-        "Origin": "https://www.bseindia.com",
-    })
-    try:
-        session.get("https://www.bseindia.com/", timeout=15)
-    except requests.RequestException:
-        pass
-
-    response = session.get(
-        BSE_EQUITY_API,
-        params={"Group": "", "scripcode": "", "industry": "", "segment": "Equity", "status": "Active"},
-        timeout=35,
-    )
-    response.raise_for_status()
-    rows = _extract_bse_rows(response.json())
-
+def _normalise_bse_records(items):
+    """Normalise records from BSE's JSON list or standardised CSV master."""
     records = []
-    for item in rows:
+    for item in items:
         if not isinstance(item, dict):
             continue
         code = _bse_field(item, (
-            "SCRIP_CD", "Scrip_Code", "ScripCode", "scrip_cd", "SCRIPCODE", "scripcode"
+            "SCRIP_CD", "Scrip_Code", "ScripCode", "scrip_cd", "SCRIPCODE",
+            "scripcode", "FinInstrmId", "Scrip Code", "SCRIP CODE",
         ))
         name = _bse_field(item, (
             "Issuer_Name", "Scrip_Name", "SecurityName", "ISSUER_NAME",
-            "Security_Name", "scrip_name", "company_name"
+            "Security_Name", "scrip_name", "company_name", "FinInstrmNm",
+            "Scrip Name", "Security Name",
         ))
-        isin = _bse_field(item, ("ISIN_NUMBER", "ISIN", "isin_number", "isin")).upper()
+        isin = _bse_field(item, (
+            "ISIN_NUMBER", "ISIN", "isin_number", "isin", "ISIN Code",
+            "ISIN CODE",
+        )).upper()
         sector = _bse_field(item, ("INDUSTRY", "Industry", "industry"), "Unknown")
+        if not code.isdigit() and str(item.get("Scrip Code", "")).strip().isdigit():
+            code = str(item["Scrip Code"]).strip()
         if not code.isdigit() or not name:
             continue
         records.append({
@@ -145,13 +130,105 @@ def fetch_bse_universe():
             "isin": isin,
             "yahoo_symbol": code + ".BO",
         })
+    return records
+
+
+def _parse_bse_scrip_zip(content):
+    """Parse CSV/TXT members from BSE's public SCRIP.ZIP when the JSON API is blocked."""
+    try:
+        archive = zipfile.ZipFile(io.BytesIO(content))
+    except (zipfile.BadZipFile, OSError) as exc:
+        raise ValueError(f"BSE scrip-master download was not a valid ZIP: {exc}") from exc
+
+    failures = []
+    for member in archive.namelist():
+        if member.endswith("/") or not member.lower().endswith((".csv", ".txt")):
+            continue
+        try:
+            raw_bytes = archive.read(member)
+            frame = pd.read_csv(io.BytesIO(raw_bytes), dtype=str, encoding_errors="replace")
+            frame.columns = [str(col).strip() for col in frame.columns]
+            names = {str(col).strip().lower(): col for col in frame.columns}
+            code_col = next((names[key] for key in (
+                "scrip code", "scrip_cd", "scripcode", "fininstrmid", "security code"
+            ) if key in names), None)
+            name_col = next((names[key] for key in (
+                "scrip name", "issuer_name", "fininstrmnm", "security name", "securityname"
+            ) if key in names), None)
+            isin_col = next((names[key] for key in (
+                "isin code", "isin", "isin_number"
+            ) if key in names), None)
+            if code_col and name_col:
+                items = []
+                for _, row in frame.iterrows():
+                    items.append({
+                        "Scrip Code": str(row.get(code_col, "")).strip(),
+                        "Scrip Name": str(row.get(name_col, "")).strip(),
+                        "ISIN Code": str(row.get(isin_col, "")).strip() if isin_col else "",
+                    })
+                records = _normalise_bse_records(items)
+                if records:
+                    return records
+        except Exception as exc:
+            failures.append(f"{member}: {exc}")
+            continue
+    detail = "; ".join(failures[:3]) or "No CSV/TXT member with recognised BSE scrip-code/name columns"
+    raise ValueError(f"BSE SCRIP.ZIP could not be parsed: {detail}")
+
+
+def fetch_bse_universe():
+    """Refresh active BSE equity scrips via public JSON, then official SCRIP.ZIP fallback.
+
+    BSE scrip codes map to Yahoo Finance .BO tickers for free scanning. If both
+    public BSE paths fail, the existing cache is left untouched.
+    """
+    session = requests.Session()
+    session.headers.update({
+        "User-Agent": USER_AGENT,
+        "Accept": "application/json, text/plain, */*",
+        "Accept-Language": "en-US,en;q=0.9",
+        "Origin": "https://www.bseindia.com",
+        "Referer": "https://www.bseindia.com/",
+        "Connection": "keep-alive",
+        "Sec-Fetch-Site": "same-site",
+        "Sec-Fetch-Mode": "cors",
+        "Sec-Fetch-Dest": "empty",
+    })
+    try:
+        session.get("https://www.bseindia.com/", timeout=15)
+    except requests.RequestException:
+        pass
+
+    api_error = None
+    records = []
+    try:
+        response = session.get(
+            BSE_EQUITY_API,
+            params={"Group": "", "scripcode": "", "industry": "", "segment": "Equity", "status": "Active"},
+            timeout=35,
+        )
+        response.raise_for_status()
+        records = _normalise_bse_records(_extract_bse_rows(response.json()))
+        if not records:
+            raise ValueError("BSE JSON endpoint returned no normalisable equity scrip records")
+    except Exception as exc:
+        api_error = exc
+
+    if not records:
+        try:
+            master = session.get(BSE_SCRIP_ZIP, timeout=45)
+            master.raise_for_status()
+            records = _parse_bse_scrip_zip(master.content)
+        except Exception as zip_exc:
+            raise RuntimeError(
+                "BSE refresh failed on both public sources. "
+                f"JSON endpoint: {api_error}; official SCRIP.ZIP fallback: {zip_exc}. "
+                "The existing BSE cache was preserved."
+            ) from zip_exc
 
     out = pd.DataFrame(records)
     if out.empty:
-        raise ValueError(
-            "BSE returned no active equity scrips in the expected format. "
-            "BSE may have changed its public endpoint; cached list was preserved."
-        )
+        raise ValueError("BSE returned no usable EQ securities; existing cache was preserved.")
     out = out.drop_duplicates("yahoo_symbol").sort_values("symbol").reset_index(drop=True)
     DATA_DIR.mkdir(parents=True, exist_ok=True)
     out.to_csv(BSE_CACHE, index=False)
