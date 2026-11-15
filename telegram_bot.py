@@ -158,8 +158,9 @@ def format_scan_messages(result):
         f"🔎 Scan: {result['success_count']}/{result['selected_count']} usable histories "
         f"({result.get('nse_selected', 0)} NSE + {result.get('bse_selected', 0)} BSE selected) · "
         f"{result['candidate_count']} candidates passed filters\\n"
-        f"📰 News: {result.get('news_count', 0)} items · "
+        f"📰 Broad RSS/GDELT feeds: {result.get('news_count', 0)} headlines · "
         f"{result.get('news_sources_working', 0)}/{result.get('news_sources_total', 0)} sources responding\\n"
+        "<i>Company-news searches are separately run for the leading 35 technical candidates.</i>\\n"
         "<i>Daily-close research only. Levels are references, not live prices or orders.</i>"
     )
     messages = [header]
