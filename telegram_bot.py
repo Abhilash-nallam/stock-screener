@@ -224,6 +224,14 @@ def format_scan_messages(result):
     usable = int(result.get("success_count", 0) or 0)
     daily_coverage = (100.0 * usable / selected) if selected else 0.0
     breadth = result.get("live_breadth") or {}
+    bse_count = int(result.get("bse_universe_count", 0) or 0)
+    bse_error = result.get("bse_refresh_error")
+    if bse_count:
+        bse_cache_line = f"🏛 <b>BSE universe cache:</b> {bse_count:,} securities loaded; BSE-only tickers are included in the rotating scan."
+    elif bse_error:
+        bse_cache_line = "⚠️ <b>BSE universe unavailable:</b> " + html.escape(str(bse_error)[:220]) + " · Retry with /refresh_bse."
+    else:
+        bse_cache_line = "⚠️ <b>BSE universe cache is empty:</b> use /refresh_bse to load BSE scrips."
     header_lines = [
         "<b>🇮🇳 INDIA STOCK RADAR — FREE INTRADAY SCAN</b>",
         f"🟢 <b>NSE session:</b> OPEN · {html.escape(str(session.get('local_time', '')))} IST",
@@ -238,6 +246,8 @@ def format_scan_messages(result):
         f"({market.get('global_positive_count', 0)}/{market.get('global_count', 0)} global indices positive over 5 sessions)",
         f"🔎 <b>Daily universe:</b> {usable}/{selected} usable histories ({daily_coverage:.1f}%) · "
         f"{result.get('nse_selected', 0)} NSE + {result.get('bse_selected', 0)} BSE selected",
+        f"📚 <b>NSE universe cache:</b> {int(result.get('nse_universe_count', 0) or 0):,} securities",
+        bse_cache_line,
         "✅ <b>Exchange scope:</b> NSE .NS and BSE .BO symbols are both supported; actual intraday availability varies by symbol.",
         f"🧪 <b>Intraday checks:</b> {result.get('live_researched_count', 0)} leaders researched · "
         f"{result.get('live_confirmed_count', 0)} confirmed · {result.get('live_wait_count', 0)} waiting",
