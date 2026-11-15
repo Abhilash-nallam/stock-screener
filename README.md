@@ -1,9 +1,9 @@
 # India Stock Radar
 
-A Streamlit dashboard and a serverless Telegram-controlled stock scanner.
+A private-command Telegram scanner with an optional Streamlit dashboard.
 
 ## Hosting architecture — free tiers
-- **Streamlit Community Cloud:** hosts the dashboard.
+- **Streamlit Community Cloud:** optional visual dashboard. Public viewers cannot trigger scans unless the owner configures and enters a private dashboard password.
 - **Cloudflare Workers Free:** receives Telegram webhook commands (100,000 requests/day plan allowance).
 - **GitHub Actions:** runs the Python scanner only when requested. Standard GitHub-hosted runners are free for public repositories.
 - No always-on Python worker, Render Background Worker, VPS or home PC is needed.
@@ -16,14 +16,14 @@ The GitHub repository must remain public to use the unlimited standard hosted-ru
 - `/refresh_nse`, `/refresh_bse`, `/refresh_all`: refresh exchange universes.
 - `/status`: report cached NSE/BSE universe counts.
 - Inline buttons provide the same actions.
-- Reports contain market regime, scan coverage, top-five candidates in each price band, company/exchange, last close, score, 1D/5D/20D changes, entry reference, stop, two targets, risk, RSI and relative volume.
+- Reports contain market regime, coverage, live-confirmation status, top candidates in each price band, company/exchange, latest completed 5-minute candle close, daily model score, intraday score, 1D/5D/20D changes, VWAP, entry/stop/target references, risk, RSI and volume evidence.
 - Positive/negative moves use green/red icons. Telegram does not support arbitrary HTML text colours.
 
 ## Market-data limitations
 Daily OHLCV comes from Yahoo Finance via yfinance, an unofficial source that may be delayed, incomplete or throttled. It is not a live execution feed.
 The NSE list is downloaded from the public NSE equity CSV. The BSE list is sourced from a public BSE active-scrip endpoint; that endpoint may change or rate-limit. The scanner combines the two lists and uses ISIN de-duplication where matching ISINs exist.
 Model scores are heuristic rankings, not calibrated profit probabilities or guarantees. Full official delivery-volume, FII/DII, audited fundamentals and a corporate-filings classifier are not currently integrated.
-Displayed prices/entry/stop/targets are based on daily closes and are not live order instructions.
+Daily technical scores use completed daily candles. Intraday levels use the latest completed 5-minute candle close and ATR references; neither is an exchange-certified real-time quote or an order instruction.
 
 ## Deploy the dashboard
 Deploy on Streamlit Community Cloud:
@@ -31,18 +31,18 @@ Deploy on Streamlit Community Cloud:
 - Branch: `new`
 - Main file: `app.py`
 
-Add root-level Streamlit Secrets for its manual Telegram test/summary buttons:
+For a public Streamlit deployment, do not add Telegram bot tokens, GitHub PATs, broker access tokens or broker credentials to Streamlit Secrets. Manual dashboard scans are disabled by default. To enable them, add one private password:
 ```toml
-TELEGRAM_BOT_TOKEN = "your_bot_token"
-TELEGRAM_CHAT_ID = "your_private_chat_id"
+RADAR_DASHBOARD_PASSWORD = "use-a-long-random-password"
 ```
+Only the owner should enter this password. Telegram scans continue to run through the separate private Telegram → Cloudflare → GitHub Actions route.
 
 ## Configure GitHub Actions secrets
 In GitHub repository **Settings → Secrets and variables → Actions → New repository secret**, create:
 - `TELEGRAM_BOT_TOKEN`: the BotFather token.
 - `TELEGRAM_CHAT_ID`: your authorised personal chat ID.
 
-The repository is public, but Actions secrets are not exposed in repository source. Never put tokens in code, issues, logs or commits.
+The repository is public, but Actions secrets are not exposed in repository source. Never put tokens in code, issues, logs or commits. The scanner workflow receives only the Telegram bot token and your private chat ID; no Groww or Dhan market-data credentials are required.
 
 ## Deploy the Cloudflare Telegram webhook
 1. Sign in to Cloudflare and open **Workers & Pages**.
@@ -78,7 +78,7 @@ Test the Worker health URL: `https://YOUR-WORKER.YOUR-ACCOUNT.workers.dev/health
 
 ## How a Telegram scan runs
 1. Telegram posts an update to Cloudflare Worker.
-2. Cloudflare validates the Telegram webhook secret and authorised chat ID.
+2. Cloudflare validates the Telegram webhook secret, private-chat type, sender ID and authorised chat ID. It also rejects oversized payloads, throttles rapid commands and requires a long setup key for webhook registration.
 3. Cloudflare calls GitHub's workflow-dispatch API.
 4. GitHub Actions installs the lightweight scanner dependencies, restores the exchange-list cache, and runs `telegram_action.py`.
 5. The Python job posts the formatted scan or refresh report to Telegram.
@@ -98,13 +98,16 @@ streamlit run app.py
 For local Telegram long polling only, `python telegram_bot.py` remains available. Do not run polling and webhook mode at the same time with the same Telegram bot token.
 
 ## Forward-test ledger
-The dashboard uses a local CSV ledger under `data/recommendation_ledger.csv`. The GitHub Actions runner also writes to a temporary workspace; Actions cache may restore/save the universe files, but it is not a guaranteed permanent database for a trade ledger.
+The dashboard uses a local CSV ledger under `data/recommendation_ledger.csv`. The GitHub Actions cache now stores only the NSE/BSE universe files and their refresh metadata, not the trade ledger. GitHub-hosted runners are temporary, so the forward-test ledger written by Telegram scans is not guaranteed to persist between runs.
 
 ## Security
-- Never commit `.env`, Telegram tokens or GitHub PATs.
+- Never commit `.env`, Telegram tokens, Cloudflare secrets, broker tokens or GitHub PATs.
 - Rotate any token ever committed publicly.
-- Restrict the Telegram bot to your personal chat ID.
-- Use a fine-grained GitHub token with repository-only Actions write permission.
+- Restrict the Telegram webhook to your private chat and sender ID.
+- Use a fine-grained GitHub token scoped only to this repository with Actions read/write permission.
+- The public Streamlit dashboard does not expose broker holdings or Telegram send buttons. Manual scans require `RADAR_DASHBOARD_PASSWORD`; leave it unset if the dashboard is only for viewing.
+- GitHub Actions use immutable action commit SHAs, full-project Python compilation, unit tests, JavaScript syntax checks and a Python dependency vulnerability audit.
+- The Worker source in this repository is not auto-deployed by GitHub. After changing `cloudflare/telegram-worker.js`, paste the updated file into Cloudflare Workers and deploy it.
 
 
 ## Model v2 data coverage (latest upgrade)
@@ -119,7 +122,6 @@ The dashboard uses a local CSV ledger under `data/recommendation_ledger.csv`. Th
 - BSE corporate announcements RSS.
 - SEBI RSS, RBI press-release/notification RSS and PIB government-release RSS.
 - GDELT DOC multilingual global news query for India/global markets, central banks, geopolitics, tariffs, crude, semiconductors and related macro topics.
-- Global RSS headlines: BBC World/Business/Asia, CNBC World/Asia/Economy and The Guardian Business.
 - Global RSS headlines: BBC World/Business/Asia, CNBC World/Asia/Economy and The Guardian Business.
 - Google News RSS company-specific query for the leading 35 preliminary technical candidates.
 - Stories carry source, timestamp and URL; duplicates and items older than five days are filtered when timestamps exist. The source-health summary shows which feeds responded during each scan. Company-news queries run in a bounded concurrent pool.
@@ -143,13 +145,13 @@ Streamlit is optional and only hosts the visual dashboard. The Telegram workflow
 
 The default Telegram scan uses Yahoo Finance's public 5-minute chart data for NSE `.NS` and BSE `.BO` tickers. It does not call Groww live-data endpoints, broker order APIs, or any paid market-data API. The Groww API key/secret entries in GitHub Actions are not used by this zero-cost scanner and may be removed from repository secrets. Do not share them.
 
-Important limitation: Yahoo Finance is an unofficial public data route. Its 5-minute candles may be delayed, stale, missing for some symbols, or temporarily unavailable. The displayed intraday price is the latest completed 5-minute candle close, not an exchange-certified real-time last-traded price. The scanner blocks candles older than 20 minutes, excludes the currently forming 5-minute candle, and returns no candidate when intraday data is unavailable. Never rely on this feed alone for order execution; check the live quote and bid/ask in your broker app immediately before deciding.
+Important limitation: Yahoo Finance is an unofficial public data route. Its 5-minute candles may be delayed, stale, missing for some symbols, or temporarily unavailable. The displayed intraday price is the latest completed 5-minute candle close, not an exchange-certified real-time last-traded price. The scanner blocks candles older than 10 minutes, excludes the currently forming 5-minute candle, requires the first bar of the exchange session and checks the continuity of the six latest completed bars. It returns no candidate when intraday data is unavailable. Never rely on this feed alone for order execution; check the live quote and bid/ask in your broker app immediately before deciding.
 
-The first confirmation usually requires six completed 5-minute candles and an expanding-volume comparison; availability may therefore begin around 09:45 IST or later. Both NSE and BSE are attempted via `.NS` / `.BO` tickers, but Yahoo coverage differs by symbol and an unavailable BSE candle is skipped rather than treated as a negative signal.
+The first confirmation requires the first session candle plus at least six consecutive completed 5-minute candles, an expanding-volume comparison, and a Nifty candle close within 10 minutes of the candidate's candle close. On a normal session, the earliest possible confirmation is around 09:45 IST or later. The latest candle must be no older than 10 minutes. High daily-risk candidates are excluded. Both NSE and BSE are attempted via `.NS` / `.BO` tickers, but Yahoo coverage differs by symbol and an unavailable BSE candle is skipped rather than treated as a negative signal.
 
 Groww's Free Trial/API key is not the same as free live market data. Groww currently advertises free-trial access to Cloud and APIs other than Live Data and Backtesting; live quotes (LTP/OHLC) and historical candle access are included in its paid API subscription at ₹499/month plus taxes. The free API key can still be useful for other Groww APIs, but this stock scanner does not need it. See [Groww pricing](https://groww.in/trade-api), [free trial explanation](https://groww.in/blog/api-trading-on-groww), and [Live Data docs](https://groww.in/trade-api/docs/curl/live-data).
 
-Groww's static-IP notice is relevant to API order placement. This repository's scanner does not send orders, so no static IP is needed for this read-only research workflow.
+Groww's static-IP notice is relevant to API order placement. This repository's scanner does not send orders, so no static IP is needed. The old paid Groww live-market adapter has been removed; no paid broker market-data API is used by this free scanner.
 ### NSE/BSE universe cache behavior
 
 Before scanning, the worker checks the NSE and BSE caches separately. If NSE exists but BSE is missing, it now attempts the BSE refresh independently instead of silently reporting a 0-BSE scan. If the BSE public endpoint fails, the report shows the reason and `/refresh_bse` can be used to retry. The 250/500 mixed universe uses a rotating sample (normally up to 80% NSE and 20% BSE-exclusive instruments); companies listed on both exchanges are deduplicated by ISIN, preferring NSE.
