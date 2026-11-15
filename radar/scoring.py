@@ -40,7 +40,9 @@ def apply_news_overlay(base_score,headlines):
             confidence=float(item.get("sentiment_confidence",0))
             source_weight=float(item.get("source_weight",0.5))
             age=item.get("age_hours")
-            freshness=1.0 if age is None else max(0.15,1-max(0.0,float(age))/120)
+            # Undated stories may be displayed for context but must not move
+            # the score: their freshness cannot be verified.
+            freshness=0.0 if age is None else max(0.15,1-max(0.0,float(age))/120)
             weight=max(0.0,confidence*source_weight*freshness)
             if weight: weighted.append((sentiment,weight))
             if item.get("source_type") in ("exchange","regulator") and sentiment<=-0.5 and confidence>=0.5:
