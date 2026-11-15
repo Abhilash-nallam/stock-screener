@@ -251,6 +251,11 @@ def fetch_intraday_5m_snapshot(symbol, now=None, session_open=None):
     completed_before = current.replace(
         minute=(current.minute // 5) * 5, second=0, microsecond=0
     )
+    if isinstance(session_open, str):
+        try:
+            session_open = clock_time.fromisoformat(session_open)
+        except ValueError:
+            return None
     start_time = session_open or clock_time(9, 15)
     session_open_dt = current.replace(
         hour=start_time.hour, minute=start_time.minute, second=0, microsecond=0
@@ -298,6 +303,8 @@ def fetch_intraday_5m_snapshot(symbol, now=None, session_open=None):
     last_bar_end = last["time"] + timedelta(minutes=5)
     age_seconds = (current - last_bar_end).total_seconds()
     if age_seconds < -30 or age_seconds > MAX_INTRADAY_AGE_SECONDS:
+        return None
+    if last_bar_end > current:
         return None
     snapshot = {
         "price": last["close"],
