@@ -1,7 +1,8 @@
-"""Intraday confirmation layer for live stock-watchlist candidates.
+"""Intraday confirmation layer for watchlist candidates.
 
-Combines a previously completed daily technical score with a fresh Groww quote
-and completed 5-minute candles. This produces watch/avoid signals, not orders.
+Combines a completed daily technical score with the latest available completed
+public Yahoo 5-minute candles. This produces watch/avoid signals, not orders.
+The candles are unofficial and may be delayed; they are not exchange LTP.
 """
 from datetime import datetime, timedelta, timezone
 import math
@@ -60,7 +61,7 @@ def build_live_signal(
     last_trade_dt = _trade_time_epoch(timestamp_value)
     quote_age = (current.astimezone(timezone.utc) - last_trade_dt).total_seconds() if last_trade_dt else None
     # Yahoo public intraday candles may be delayed. Do not call them real-time;
-    # allow up to 20 minutes but label the exact candle time and provider.
+    # require the exact candle timestamp and reject stale candles (10-minute cap).
     max_age = _number((detail or {}).get("max_age_seconds"), 600 if "Yahoo" in source_label else 180)
     quote_fresh = quote_age is not None and -5 <= quote_age <= max_age
 
