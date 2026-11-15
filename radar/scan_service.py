@@ -170,6 +170,7 @@ def run_scan(limit=250, min_score=60, news_limit=6, workers=6):
 
     bse_universe_count = len(load_cached_bse_universe())
     nse_universe_count = len(load_cached_nse_universe())
+    nse_refresh_error = universe_refresh_errors.get("nse")
     bse_refresh_error = universe_refresh_errors.get("bse")
 
     selected = select_scan_universe(universe, limit)
@@ -408,6 +409,7 @@ def run_scan(limit=250, min_score=60, news_limit=6, workers=6):
         "bse_selected": bse_count,
         "nse_universe_count": nse_universe_count,
         "bse_universe_count": bse_universe_count,
+        "nse_refresh_error": nse_refresh_error,
         "bse_refresh_error": bse_refresh_error,
         "bse_live_supported": True,
     }
