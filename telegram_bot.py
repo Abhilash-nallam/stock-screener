@@ -210,11 +210,7 @@ def format_scan_messages(result):
             f"🟢 NSE session: <b>OPEN</b> ({html.escape(str(session.get('local_time', '')))} IST)\n"
             "No candidates were generated because free intraday data was unavailable or could not be verified.\n\n"
             f"<b>Reason:</b> {reason}\n\n"
-            "<b>Setup needed:</b> Add Groww API credentials as GitHub Actions secrets: "
-            "<code>GROWW_ACCESS_TOKEN</code>, or <code>GROWW_API_KEY</code> and <code>GROWW_API_SECRET</code>.\n"
-            "Groww's API-key/secret flow requires daily approval on its Cloud API Keys page. "
-            "A manually generated access token expires daily at 06:00 IST.\n"
-            "<i>Yahoo daily prices are not substituted for live quotes.</i>"
+            "<i>No paid API or broker order was attempted. Retry later; stale or missing intraday candles are rejected.</i>"
         ]
 
     market = result.get("market") or {}
@@ -255,7 +251,7 @@ def format_scan_messages(result):
     benchmarks = market.get("benchmarks", {}) or {}
     india_lines = ["<b>🇮🇳 INDIA MARKET</b>"]
     india_lines.append(
-        f"• <b>NIFTY 50 LIVE:</b> {_pct(result.get('live_nifty_change_pct'))} vs previous close · "
+        f"• <b>NIFTY 50 latest 5m close:</b> {_pct(result.get('live_nifty_change_pct'))} vs previous close · "
         f"daily trend {html.escape(regime)}"
     )
     for key, label in (("SENSEX", "SENSEX"), ("INDIA_VIX", "India VIX")):
