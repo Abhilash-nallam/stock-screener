@@ -50,12 +50,14 @@ def build_live_signal(daily_row, snapshot, detail, nifty_change_pct=None, now=No
     if live_price is None or live_price <= 0 or previous_close is None or previous_close <= 0:
         return {"live_status": "REJECT — invalid live/previous-close price", "live_eligible": False}
 
-    last_trade_dt = _trade_time_epoch(quote.get("last_trade_time"))
+    source_label = str((detail or {}).get("provider") or (snapshot or {}).get("provider") or "")
+    timestamp_value = quote.get("last_trade_time") or quote.get("last_update_time")
+    last_trade_dt = _trade_time_epoch(timestamp_value)
     quote_age = (current.astimezone(timezone.utc) - last_trade_dt).total_seconds() if last_trade_dt else None
-    if quote_age is None:
-        quote_fresh = False
-    else:
-        quote_fresh = -5 <= quote_age <= 180
+    # Yahoo public intraday candles may be delayed. Do not call them real-time;
+    # allow up to 20 minutes but label the exact candle time and provider.
+    max_age = 1200 if "Yahoo" in source_label else 180
+    quote_fresh = quote_age is not None and -5 <= quote_age <= max_age
 
     day_change = (live_price / previous_close - 1.0) * 100.0
     gap_pct = (day_open / previous_close - 1.0) * 100.0 if day_open else None
@@ -74,7 +76,9 @@ def build_live_signal(daily_row, snapshot, detail, nifty_change_pct=None, now=No
         "live_relative_strength_pct": round(relative_to_nifty, 2) if relative_to_nifty is not None else None,
         "live_quote_age_seconds": round(quote_age, 1) if quote_age is not None else None,
         "live_quote_time": last_trade_dt.astimezone(IST).strftime("%H:%M:%S IST") if last_trade_dt else "unavailable",
-        "live_provider": "Groww Live Data API",
+        "live_provider": source_label or "Unknown intraday source",
+        "live_timestamp_label": str((detail or {}).get("timestamp_label") or "last trade"),
+        "live_max_age_seconds": max_age,
         "live_vwap": None,
         "live_vwap_distance_pct": None,
         "live_5m_momentum_pct": None,
@@ -92,7 +96,7 @@ def build_live_signal(daily_row, snapshot, detail, nifty_change_pct=None, now=No
 
     reasons = []
     if not quote_fresh:
-        reasons.append("Last trade is missing or older than 3 minutes")
+        reasons.append(f"Intraday timestamp is missing or older than {int(max_age / 60)} minutes")
     if len(candles) < 6:
         reasons.append(f"Only {len(candles)} completed 5-minute candles; need at least 6 for volume confirmation")
     if day_open is None or day_open <= 0:
@@ -168,7 +172,7 @@ def build_live_signal(daily_row, snapshot, detail, nifty_change_pct=None, now=No
     })
 
     if not quote_fresh:
-        reasons.append("Fresh last-trade timestamp failed")
+        reasons.append("Intraday timestamp freshness check failed")
     if vwap_distance is None or vwap_distance <= 0:
         reasons.append("Price is not above session VWAP")
     if momentum_3 is None or momentum_3 <= 0:
@@ -189,7 +193,7 @@ def build_live_signal(daily_row, snapshot, detail, nifty_change_pct=None, now=No
     if live_score < 68:
         reasons.append("Live composite score is below the confirmation threshold")
 
-    # At least 6 completed candles, expanding volume, a fresh trade timestamp,
+    # At least 6 completed candles, expanding volume, a recent provider timestamp,
     # price above VWAP, positive short-term momentum and a non-extreme opening gap are mandatory.
     hard_gates = (
         quote_fresh
