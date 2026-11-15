@@ -147,7 +147,7 @@ When the regular session is open, the scanner requires Groww live-data credentia
 2. Fetches live NSE LTP and current-session OHLC snapshots in batches of up to 50.
 3. Calculates live breadth versus the prior completed close and live Nifty change versus its prior completed close.
 4. Enriches the top daily candidates with a current quote and completed 5-minute candles.
-5. Confirms a watchlist candidate only when the last trade is no older than 3 minutes, price is above session VWAP, the last three completed 5-minute candles have positive momentum and the last is green, the opening gap is no greater than +3.5% and no lower than -2%, relative strength versus Nifty is not materially negative, and the live composite score is at least 68/100.
+5. Confirms a watchlist candidate only when the last trade is no older than 3 minutes, at least six completed 5-minute candles are available, recent 5-minute volume is at least 5% above the preceding three-candle average, price is above session VWAP, the last three completed candles have positive momentum and the last is green, the opening gap is no greater than +3.5% and no lower than -2%, relative strength versus Nifty is not materially negative, and the live composite score is at least 68/100.
 6. Sends only live-confirmed candidates. If none pass, the bot reports no candidate rather than forcing five names.
 
 The live score is a heuristic blend of the prior daily score (45%), VWAP position (20%), 3-bar 5-minute momentum (15%), relative strength versus Nifty (10%) and opening-gap quality (10%). It is not a probability of profit. Reference stops/targets use the daily ATR percentage; they are not guaranteed fills, and users must verify the order-book spread, current price and risk themselves.
@@ -168,4 +168,4 @@ The current live scanner sends Groww requests for NSE trading symbols. The cache
 
 ### Timing and no-trade rules
 
-NSE regular cash trading is 09:15–15:30 IST. The bot reports weekend, holiday, pre-open and post-market status before doing a scan. The first completed 5-minute candles are needed for confirmation; at the open the bot may return no trade until sufficient candles and a fresh trade timestamp exist. The exchange calendar is schedule-based and must be updated when NSE publishes a new annual holiday list.
+NSE regular cash trading is 09:15–15:30 IST. The bot reports weekend, holiday, pre-open and post-market status before doing a scan. It requires six completed 5-minute candles and an expanding-volume comparison, so the first normal-session confirmed candidates generally cannot appear before about 09:45 IST. At the open the bot will return WAIT / no trade until sufficient candles and a fresh trade timestamp exist. The exchange calendar is schedule-based and must be updated when NSE publishes a new annual holiday list.
