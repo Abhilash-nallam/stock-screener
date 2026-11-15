@@ -124,12 +124,12 @@ def _merge_live(row, signal):
     return merged
 
 
-def _free_intraday_one(meta, now):
+def _free_intraday_one(meta, now, session_open):
     """Fetch one candidate's latest completed 5-minute Yahoo candles."""
     symbol = str(meta.get("yahoo_symbol", "")).strip()
     if not symbol:
         return None
-    result = fetch_intraday_5m_snapshot(symbol, now=now)
+    result = fetch_intraday_5m_snapshot(symbol, now=now, session_open=session_open)
     if not result:
         return None
     return result
@@ -254,11 +254,12 @@ def run_scan(limit=250, min_score=60, news_limit=6, workers=6):
     # Yahoo's public 5m chart feed is the zero-cost option. Use the Yahoo
     # ticker (.NS or .BO) provided by each exchange's universe mapping.
     current = pd.Timestamp.now(tz="Asia/Kolkata").to_pydatetime()
+    session_open = market_session.get("session_open") or "09:15"
     intraday_results = {}
     detail_failures = 0
     with ThreadPoolExecutor(max_workers=4) as pool:
         futures = {
-            pool.submit(_free_intraday_one, row.to_dict(), current): index
+            pool.submit(_free_intraday_one, row.to_dict(), current, session_open): index
             for index, row in detailed.iterrows()
         }
         for future in as_completed(futures):
@@ -270,7 +271,7 @@ def run_scan(limit=250, min_score=60, news_limit=6, workers=6):
                 detail_failures += 1
 
     # Nifty 5m feed gives a same-provider broad-market comparator.
-    nifty_intraday = fetch_intraday_5m_snapshot("^NSEI", now=current)
+    nifty_intraday = fetch_intraday_5m_snapshot("^NSEI", now=current, session_open=session_open)
     if not nifty_intraday:
         return _empty_result(
             market_session,
@@ -294,6 +295,14 @@ def run_scan(limit=250, min_score=60, news_limit=6, workers=6):
     nifty_candle_price = float(nifty_intraday["snapshot"]["price"])
     nifty_change = (nifty_candle_price / nifty_prev_close - 1.0) * 100.0
     nifty_candle_age = nifty_intraday["detail"]["age_seconds"]
+    nifty_candle_end = nifty_intraday["snapshot"]["bar_end_at"]
+    if nifty_candle_age > 600:
+        return _empty_result(
+            market_session,
+            "Latest completed Nifty 5-minute candle is older than 10 minutes. No recommendations were generated.",
+            live_provider=YAHOO_INTRADAY_PROVIDER,
+            market=market,
+        )
 
     live_rows = []
     for index, row in detailed.iterrows():
@@ -305,6 +314,7 @@ def run_scan(limit=250, min_score=60, news_limit=6, workers=6):
             intraday["snapshot"],
             intraday["detail"],
             nifty_change_pct=nifty_change,
+            nifty_candle_end_time=nifty_candle_end,
         )
         live_rows.append(_merge_live(row, signal))
 
