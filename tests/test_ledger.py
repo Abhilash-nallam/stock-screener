@@ -40,6 +40,29 @@ class ForwardTestLedgerTests(unittest.TestCase):
         refreshed = _refresh(ledger, {"BSE:ABC": self.bse, "ABC": self.bse})
         self.assertTrue(pd.isna(refreshed.iloc[0]["return_5d_pct"]))
 
+    def test_forward_return_uses_live_entry_price_when_available(self):
+        ledger = pd.DataFrame([{
+            "asof_date": str(self.dates[0].date()),
+            "symbol": "ABC",
+            "exchange": "NSE",
+            "price": 100.0,
+            "live_price": 105.0,
+            "return_5d_pct": None,
+        }])
+        refreshed = _refresh(ledger, {"NSE:ABC": self.nse})
+        self.assertEqual(refreshed.iloc[0]["return_5d_pct"], 4.76)
+
+    def test_legacy_ledger_without_live_price_uses_daily_close(self):
+        ledger = pd.DataFrame([{
+            "asof_date": str(self.dates[0].date()),
+            "symbol": "ABC",
+            "exchange": "NSE",
+            "price": 100.0,
+            "return_5d_pct": None,
+        }])
+        refreshed = _refresh(ledger, {"NSE:ABC": self.nse})
+        self.assertEqual(refreshed.iloc[0]["return_5d_pct"], 10.0)
+
     def test_save_does_not_deduplicate_same_symbol_across_exchanges(self):
         picks = pd.DataFrame([
             {"data_date": str(self.dates[0].date()), "symbol": "ABC", "company": "Alpha",
