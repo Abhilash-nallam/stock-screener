@@ -140,7 +140,7 @@ Streamlit is optional and only hosts the visual dashboard. The Telegram workflow
 
 ## Live market-open decision layer (model v3)
 
-The Telegram `/fetch 250` and `/fetch 500` commands first check the NSE cash-equity session in Asia/Kolkata time. The current static NSE holiday table is populated for 2026; unknown calendar years fail closed until their official holiday schedule is added. This is a schedule-based check, not an exchange outage/status feed, and special sessions such as Muhurat trading are not automatically detected.
+The Telegram `/fetch 250` and `/fetch 500` commands first check the NSE cash-equity session in Asia/Kolkata time. The current static NSE holiday table is populated for 2026 and includes the published Sunday 8 November 2026 Diwali Muhurat equity-cash session (pre-open 14:05–14:20; normal trading 14:20–15:30 IST). Unknown calendar years fail closed until their official holiday schedule is added. This is a schedule-based check, not an exchange outage/status feed; new special sessions must be added when NSE publishes their timings.
 
 When the regular session is open, the scanner requires Groww live-data credentials. It does not fall back to Yahoo daily prices and label them live. The scan then:
 1. Uses completed daily OHLCV only as the baseline; the current unfinished Yahoo daily candle is removed.
