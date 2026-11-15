@@ -51,6 +51,30 @@ class FreeIntradayTests(unittest.TestCase):
             result = fetch_intraday_5m_snapshot("RELIANCE.NS", now=now)
         self.assertIsNone(result)
 
+    def test_missing_first_session_candle_is_rejected(self):
+        now = datetime(2026, 11, 16, 9, 47, tzinfo=IST)
+        frame = self._frame().iloc[1:]
+        with patch("radar.free_data.yf.download", return_value=frame):
+            result = fetch_intraday_5m_snapshot("RELIANCE.NS", now=now)
+        self.assertIsNone(result)
+
+    def test_old_completed_candle_is_rejected(self):
+        now = datetime(2026, 11, 16, 10, 5, tzinfo=IST)
+        frame = self._frame().iloc[:6]
+        with patch("radar.free_data.yf.download", return_value=frame):
+            result = fetch_intraday_5m_snapshot("RELIANCE.NS", now=now)
+        self.assertIsNone(result)
+
+    def test_custom_session_open_supports_special_session(self):
+        now = datetime(2026, 11, 8, 14, 55, tzinfo=IST)
+        stamps = pd.date_range("2026-11-08 14:20:00", periods=8, freq="5min", tz=IST)
+        frame = self._frame()
+        frame.index = stamps
+        with patch("radar.free_data.yf.download", return_value=frame):
+            result = fetch_intraday_5m_snapshot("500325.BO", now=now, session_open="14:20")
+        self.assertIsNotNone(result)
+        self.assertEqual(result["detail"]["candles"][0]["time"].time(), time(14, 20))
+
     def test_current_forming_bar_is_excluded(self):
         now = datetime(2026, 11, 16, 9, 46, tzinfo=IST)
         frame = self._frame()
