@@ -40,6 +40,20 @@ class NewsPipelineTests(unittest.TestCase):
         b = {"link": "https://example.test/item", "title": "Story duplicate"}
         self.assertEqual(len(_dedupe([a, b])), 1)
 
+
+    def test_global_noise_headlines_are_filtered(self):
+        from radar.news import _is_market_relevant
+        self.assertFalse(_is_market_relevant("Judo champion shakes up French presidential race"))
+        self.assertFalse(_is_market_relevant("Could Budapest be the next digital nomad hotspot?"))
+        self.assertFalse(_is_market_relevant("Ebola treatment centre opens"))
+        self.assertTrue(_is_market_relevant("Federal Reserve signals possible interest rate cut"))
+        self.assertTrue(_is_market_relevant("Crude oil rises after new sanctions"))
+    
+    def test_company_quote_pages_are_filtered(self):
+        from radar.news import _is_company_noise
+        self.assertTrue(_is_company_noise("ICICI Bank Limited stock price, news, quote and history - Yahoo Finance"))
+        self.assertFalse(_is_company_noise("ICICI Bank reports 18 percent quarterly profit growth"))
+
     def test_official_negative_headline_is_flagged(self):
         headline = {
             "sentiment": -1.0,
