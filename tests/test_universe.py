@@ -1,7 +1,9 @@
 import unittest
+import io
+import zipfile
 import pandas as pd
 
-from radar.universe import combine_universe, select_scan_universe
+from radar.universe import combine_universe, select_scan_universe, _parse_bse_scrip_zip
 
 
 class UniverseSelectionTests(unittest.TestCase):
@@ -54,6 +56,31 @@ class UniverseSelectionTests(unittest.TestCase):
         self.assertNotEqual(first["yahoo_symbol"].tolist(), second["yahoo_symbol"].tolist())
         self.assertEqual((first["exchange"] == "NSE").sum(), 200)
         self.assertEqual((first["exchange"] == "BSE").sum(), 50)
+
+    def test_bse_official_scrip_zip_csv_fallback_maps_code_and_isin(self):
+        payload = io.BytesIO()
+        csv_data = (
+            "Scrip Code,Scrip Name,ISIN Code\n"
+            "500325,RELIANCE INDUSTRIES LTD,INE002A01018\n"
+            "532540,TATA CONSULTANCY SERVICES LTD,INE467B01029\n"
+        )
+        with zipfile.ZipFile(payload, "w", zipfile.ZIP_DEFLATED) as archive:
+            archive.writestr("BSE_EQ_SCRIP_15112026.csv", csv_data)
+
+        rows = _parse_bse_scrip_zip(payload.getvalue())
+        self.assertEqual(len(rows), 2)
+        self.assertEqual(rows[0]["exchange"], "BSE")
+        by_code = {row["symbol"]: row for row in rows}
+        self.assertEqual(by_code["500325"]["yahoo_symbol"], "500325.BO")
+        self.assertEqual(by_code["500325"]["isin"], "INE002A01018")
+        self.assertEqual(by_code["532540"]["company"], "TATA CONSULTANCY SERVICES LTD")
+
+    def test_bse_scrip_zip_rejects_unknown_archive_contents(self):
+        payload = io.BytesIO()
+        with zipfile.ZipFile(payload, "w", zipfile.ZIP_DEFLATED) as archive:
+            archive.writestr("other.txt", "not a BSE security master")
+        with self.assertRaisesRegex(ValueError, "could not be parsed"):
+            _parse_bse_scrip_zip(payload.getvalue())
 
     def test_only_250_or_500_is_accepted(self):
         with self.assertRaises(ValueError):
