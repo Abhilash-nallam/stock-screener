@@ -36,7 +36,7 @@ class TelegramFormattingTests(unittest.TestCase):
         }
         card = _stock_card(row, 1)
         for text in ("TEST", "Test Limited", "Latest 5m close", "Intraday score", "Entry zone",
-                     "Stop:", "Targets", "RSI", "Confirmation", "CONFIRMED WATCHLIST"):
+                     "Stop reference", "Targets", "RSI", "Confirmation", "CONFIRMED WATCHLIST"):
             self.assertIn(text, card)
         self.assertIn("\n", card)
         self.assertNotIn("\\n", card)
