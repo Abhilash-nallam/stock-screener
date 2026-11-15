@@ -42,21 +42,24 @@ jobs:
 
     steps:
       - name: Check out scanner source
-        uses: actions/checkout@v4
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
           ref: new
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: "3.11"
           cache: pip
           cache-dependency-path: requirements-bot.txt
 
       - name: Restore exchange-universe cache
-        uses: actions/cache@v4
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
-          path: data/
+          path: |
+            data/nse_equity_universe.csv
+            data/bse_equity_universe.csv
+            data/universe_refresh.json
           key: radar-universe-${{ runner.os }}-${{ github.run_id }}
           restore-keys: |
             radar-universe-${{ runner.os }}-
