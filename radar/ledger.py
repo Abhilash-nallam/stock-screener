@@ -19,8 +19,11 @@ def _refresh(ledger,histories):
     for idx,row in ledger.iterrows():
         exchange = str(row.get("exchange", "")).upper()
         symbol = str(row.get("symbol", ""))
-        h=(histories or {}).get(f"{exchange}:{symbol}") or (histories or {}).get(symbol)
-        if h is None or h.empty: continue
+        h = (histories or {}).get(f"{exchange}:{symbol}")
+        if h is None:
+            h = (histories or {}).get(symbol)
+        if h is None or h.empty:
+            continue
         dates=pd.DatetimeIndex(pd.to_datetime(h.index))
         if dates.tz is not None: dates=dates.tz_convert("Asia/Kolkata").tz_localize(None)
         forecast=pd.Timestamp(row["asof_date"]).normalize()
