@@ -33,6 +33,18 @@ PRE_OPEN_START = time(9, 0)
 REGULAR_OPEN = time(9, 15)
 REGULAR_CLOSE = time(15, 30)
 
+# Special equity-cash sessions published separately from the annual holiday list.
+# NSE circular NSE/CMTR/76941 dated 19-Oct-2026: 08-Nov-2026 pre-open
+# 14:05-14:20 IST, normal cash market 14:20-15:30 IST.
+SPECIAL_SESSIONS = {
+    date(2026, 11, 8): {
+        "name": "Diwali Muhurat Trading",
+        "pre_open": time(14, 5),
+        "open": time(14, 20),
+        "close": time(15, 30),
+    }
+}
+
 
 def _as_ist(value=None):
     if value is None:
@@ -45,6 +57,8 @@ def _as_ist(value=None):
 
 
 def _is_session_day(day):
+    if day in SPECIAL_SESSIONS:
+        return True, SPECIAL_SESSIONS[day]["name"]
     if day.weekday() >= 5:
         return False, "Weekend"
     calendar = NSE_HOLIDAYS.get(day.year)
@@ -63,7 +77,9 @@ def next_regular_session(now=None, max_days=370):
         valid, reason = _is_session_day(candidate)
         if not valid:
             continue
-        opening = datetime.combine(candidate, REGULAR_OPEN, tzinfo=IST)
+        special = SPECIAL_SESSIONS.get(candidate)
+        opening_time = special["open"] if special else REGULAR_OPEN
+        opening = datetime.combine(candidate, opening_time, tzinfo=IST)
         if opening > current:
             return opening
     return None
@@ -84,6 +100,7 @@ def get_market_status(now=None):
         "local_time": current.strftime("%H:%M:%S"),
         "timezone": "Asia/Kolkata",
         "calendar_verified": verified,
+        "session_type": "regular",
         "regular_open": False,
         "phase": "closed",
         "reason": reason,
@@ -103,19 +120,38 @@ def get_market_status(now=None):
         return base
 
     clock = current.time().replace(tzinfo=None)
-    if clock < PRE_OPEN_START:
-        base["phase"] = "pre_market"
-        base["reason"] = "Before the NSE pre-open session (09:00 IST)."
-    elif PRE_OPEN_START <= clock < REGULAR_OPEN:
-        base["phase"] = "pre_open"
-        base["reason"] = "NSE pre-open session. Regular equity trading has not started."
-    elif REGULAR_OPEN <= clock < REGULAR_CLOSE:
-        base["phase"] = "open"
-        base["regular_open"] = True
-        base["reason"] = "NSE regular cash-equity session is open."
+    special = SPECIAL_SESSIONS.get(day)
+    if special:
+        base["session_type"] = "special"
+        base["session_name"] = special["name"]
+        pre_open, market_open, market_close = special["pre_open"], special["open"], special["close"]
+        if clock < pre_open:
+            base["phase"] = "pre_market"
+            base["reason"] = f"Before the {special['name']} pre-open session ({pre_open.strftime('%H:%M')} IST)."
+        elif pre_open <= clock < market_open:
+            base["phase"] = "pre_open"
+            base["reason"] = f"{special['name']} pre-open session. Continuous trading starts at {market_open.strftime('%H:%M')} IST."
+        elif market_open <= clock < market_close:
+            base["phase"] = "open"
+            base["regular_open"] = True
+            base["reason"] = f"{special['name']} equity-cash session is open."
+        else:
+            base["phase"] = "post_market"
+            base["reason"] = f"{special['name']} equity-cash session has closed for today."
     else:
-        base["phase"] = "post_market"
-        base["reason"] = "NSE regular cash-equity session has closed for today."
+        if clock < PRE_OPEN_START:
+            base["phase"] = "pre_market"
+            base["reason"] = "Before the NSE pre-open session (09:00 IST)."
+        elif PRE_OPEN_START <= clock < REGULAR_OPEN:
+            base["phase"] = "pre_open"
+            base["reason"] = "NSE pre-open session. Regular equity trading has not started."
+        elif REGULAR_OPEN <= clock < REGULAR_CLOSE:
+            base["phase"] = "open"
+            base["regular_open"] = True
+            base["reason"] = "NSE regular cash-equity session is open."
+        else:
+            base["phase"] = "post_market"
+            base["reason"] = "NSE regular cash-equity session has closed for today."
 
     if not base["regular_open"]:
         nxt = next_regular_session(current)
@@ -132,8 +168,10 @@ def format_market_status(status):
     reason = status.get("reason", "No session information")
     next_open = status.get("next_open_text")
     if phase == "open":
+        session_name = status.get("session_name")
+        title = f"NSE SPECIAL SESSION OPEN — {session_name}" if session_name else "NSE CASH MARKET IS OPEN"
         return (
-            "🟢 <b>NSE CASH MARKET IS OPEN</b>\n"
+            f"🟢 <b>{title}</b>\n"
             f"🗓 {date_text} · {time_text} IST\n"
             "Live screening is permitted."
         )
