@@ -299,7 +299,7 @@ def fetch_intraday_5m_snapshot(symbol, now=None, session_open=None):
         "candles": candles,
         "provider": YAHOO_INTRADAY_PROVIDER,
         "timestamp_label": "last completed 5m candle",
-        "max_age_seconds": 600,
+        "max_age_seconds": 1200,
         "age_seconds": round(age_seconds, 1),
     }
     return {"snapshot": snapshot, "detail": detail}
