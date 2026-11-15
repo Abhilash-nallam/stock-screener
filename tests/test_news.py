@@ -54,6 +54,21 @@ class NewsPipelineTests(unittest.TestCase):
         self.assertTrue(_is_company_noise("ICICI Bank Limited stock price, news, quote and history - Yahoo Finance"))
         self.assertFalse(_is_company_noise("ICICI Bank reports 18 percent quarterly profit growth"))
 
+    def test_undated_news_does_not_change_model_score(self):
+        headline = {
+            "sentiment": 1.0,
+            "sentiment_confidence": 1.0,
+            "source_weight": 1.0,
+            "age_hours": None,
+            "source_type": "company_news",
+            "source": "Google News",
+        }
+        updated, news_score, adjustment, flags = apply_news_overlay(60, [headline])
+        self.assertEqual(updated, 60.0)
+        self.assertIsNone(news_score)
+        self.assertEqual(adjustment, 0.0)
+        self.assertEqual(flags, [])
+
     def test_official_negative_headline_is_flagged(self):
         headline = {
             "sentiment": -1.0,
