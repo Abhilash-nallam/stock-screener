@@ -61,6 +61,35 @@ def universe_status():
     }
 
 
+def ensure_exchange_universes():
+    """Refresh NSE and BSE caches independently when either exchange is missing."""
+    errors = {}
+    try:
+        nse = load_cached_nse_universe()
+    except Exception as exc:
+        nse = pd.DataFrame()
+        errors["nse_cache"] = str(exc)
+    try:
+        bse = load_cached_bse_universe()
+    except Exception as exc:
+        bse = pd.DataFrame()
+        errors["bse_cache"] = str(exc)
+
+    if nse.empty:
+        try:
+            refresh_exchange("nse")
+        except Exception as exc:
+            errors["nse"] = str(exc)
+    if bse.empty:
+        try:
+            refresh_exchange("bse")
+        except Exception as exc:
+            errors["bse"] = str(exc)
+
+    universe = load_cached_combined_universe()
+    return universe, errors
+
+
 def _empty_result(market_session, message, **extra):
     return {
         "market_session": market_session,
@@ -120,15 +149,16 @@ def run_scan(limit=250, min_score=60, news_limit=6, workers=6):
             "The NSE cash-equity session is not open. No stock scan was run.",
         )
 
-    universe = load_cached_combined_universe()
+    universe, universe_refresh_errors = ensure_exchange_universes()
     if universe.empty:
-        refresh_result = refresh_both()
-        universe = load_cached_combined_universe()
-        if universe.empty:
-            return _empty_result(
-                market_session,
-                f"No exchange universe is available. Refresh errors: {refresh_result['errors']}",
-            )
+        return _empty_result(
+            market_session,
+            f"No exchange universe is available. Refresh errors: {universe_refresh_errors}",
+        )
+
+    bse_universe_count = len(load_cached_bse_universe())
+    nse_universe_count = len(load_cached_nse_universe())
+    bse_refresh_error = universe_refresh_errors.get("bse")
 
     selected = select_scan_universe(universe, limit)
     if selected.empty:
@@ -353,5 +383,8 @@ def run_scan(limit=250, min_score=60, news_limit=6, workers=6):
         "benchmarks": market.get("benchmarks", {}),
         "nse_selected": nse_count,
         "bse_selected": bse_count,
+        "nse_universe_count": nse_universe_count,
+        "bse_universe_count": bse_universe_count,
+        "bse_refresh_error": bse_refresh_error,
         "bse_live_supported": True,
     }
