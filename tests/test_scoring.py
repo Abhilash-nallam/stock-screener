@@ -42,11 +42,11 @@ class RecommendationScoringTests(unittest.TestCase):
         self.assertEqual(scored["setup_status"], "Reject — low liquidity")
 
     def test_news_overlay_is_capped(self):
-        positive = [{"sentiment": 1.0}]
-        negative = [{"sentiment": -1.0}]
-        up, _, up_delta = apply_news_overlay(60, positive)
-        down, _, down_delta = apply_news_overlay(60, negative)
-        unchanged, no_news_score, delta = apply_news_overlay(60, [])
+        positive = [{"sentiment": 1.0, "sentiment_confidence": 1.0, "source_weight": 1.0, "age_hours": 0}]
+        negative = [{"sentiment": -1.0, "sentiment_confidence": 1.0, "source_weight": 1.0, "age_hours": 0}]
+        up, _, up_delta, up_flags = apply_news_overlay(60, positive)
+        down, _, down_delta, down_flags = apply_news_overlay(60, negative)
+        unchanged, no_news_score, delta, no_flags = apply_news_overlay(60, [])
         self.assertEqual(up_delta, 4.0)
         self.assertEqual(down_delta, -4.0)
         self.assertEqual(up, 64.0)
@@ -54,6 +54,9 @@ class RecommendationScoringTests(unittest.TestCase):
         self.assertEqual(unchanged, 60.0)
         self.assertIsNone(no_news_score)
         self.assertEqual(delta, 0.0)
+        self.assertEqual(up_flags, [])
+        self.assertEqual(down_flags, [])
+        self.assertEqual(no_flags, [])
 
 
 if __name__ == "__main__":
