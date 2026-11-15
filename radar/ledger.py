@@ -54,7 +54,8 @@ def save_daily_picks(picks,histories,market_regime,path=LEDGER_PATH):
               "live_stop":r.get("live_stop"),"live_target1":r.get("live_target1"),"live_target2":r.get("live_target2"),
               "return_5d_pct":None,"return_20d_pct":None,"actual_5d_date":None,"actual_20d_date":None})
         ledger=pd.concat([ledger,pd.DataFrame(rows)],ignore_index=True)
-        ledger=ledger.drop_duplicates(["asof_date","symbol"],keep="last")
+        # Same ticker text can exist on different exchanges; keep exchange in the key.
+        ledger=ledger.drop_duplicates(["asof_date","exchange","symbol"],keep="last")
         ledger=_refresh(ledger,histories)
     for col in COLUMNS:
         if col not in ledger.columns: ledger[col]=None
