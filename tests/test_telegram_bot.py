@@ -25,8 +25,8 @@ class TelegramFormattingTests(unittest.TestCase):
             "reasons": ["Trend positive", "Relative strength positive"],
         }
         card = _stock_card(row, 1)
-        for text in ("TEST", "Test Limited", "Last close", "Model rank", "Entry reference",
-                     "Stop reference", "Targets", "RSI", "Why ranked", "Watchlist candidate"):
+        for text in ("TEST", "Test Limited", "LIVE price", "Live score", "Entry zone",
+                     "Stop:", "Targets", "RSI", "Confirmation", "CONFIRMED WATCHLIST"):
             self.assertIn(text, card)
         self.assertIn("\n", card)
         self.assertNotIn("\\n", card)
@@ -46,10 +46,21 @@ class TelegramFormattingTests(unittest.TestCase):
             "nse_selected": 200, "bse_selected": 50, "candidate_count": 8,
             "news_count": 50, "news_sources_working": 11, "news_sources_total": 18,
             "global_news": [], "official_news": [],
+            "live_ready": True, "live_provider": "Groww Live Data API",
+            "live_coverage_pct": 90.0, "live_coverage_count": 180, "live_coverage_total": 200,
+            "live_nifty_change_pct": 0.5,
+            "live_breadth": {"advances": 120, "declines": 60, "unchanged": 20},
+            "live_researched_count": 20, "live_confirmed_count": 5, "live_wait_count": 15,
             "low": pd.DataFrame([{
                 "symbol": "LOW", "company": "Low Co", "exchange": "NSE", "score": 80, "price": 100,
-                "change_1d_pct": -0.5, "ret5_pct": 1, "ret20_pct": 2, "entry_low": 98,
-                "entry_high": 102, "stop_loss": 95, "target1": 110, "target2": 115,
+                "live_price": 101, "live_score": 82.5, "live_status": "CONFIRMED WATCHLIST — verify before entry",
+                "live_quote_time": "09:45:00 IST", "live_quote_age_seconds": 4,
+                "live_change_pct": 1.0, "live_gap_pct": 0.3, "live_intraday_pct": 0.7,
+                "live_vwap": 100.5, "live_vwap_distance_pct": 0.5, "live_5m_momentum_pct": 0.4,
+                "live_relative_strength_pct": 0.6, "live_entry_low": 100.8, "live_entry_high": 101.2,
+                "live_stop": 98, "live_target1": 104, "live_target2": 106,
+                "live_reason": "Price above VWAP; positive 5-minute momentum",
+                "change_1d_pct": -0.5, "ret5_pct": 1, "ret20_pct": 2, "atr_pct": 2.5,
                 "risk": "Controlled", "rsi": 60, "rvol": 2, "setup_status": "Watchlist candidate",
             }]),
             "high": pd.DataFrame(columns=["symbol"]),
