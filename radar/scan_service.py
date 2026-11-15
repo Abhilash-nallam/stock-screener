@@ -1,5 +1,6 @@
 """Reusable scanner shared by Telegram commands and the optional Streamlit dashboard."""
 import pandas as pd
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from radar.free_data import fetch_many, fetch_market_context
 from radar.ledger import save_daily_picks
@@ -83,9 +84,10 @@ def run_scan(limit=250, min_score=60, news_limit=6, workers=6):
     base["news_adjustment"] = 0.0
     base["news_flags"] = pd.Series([[] for _ in range(len(base))], index=base.index, dtype="object")
 
-    # News requests are limited to the leading 35 technical candidates.
+    # Enrich only the leading 35 technical candidates. A small bounded pool
+    # reduces wall-clock time without flooding public RSS endpoints.
     shortlist = base.sort_values("score", ascending=False).head(35)
-    for index, row in shortlist.iterrows():
+    def fetch_candidate_news(index, row):
         try:
             headlines = company_news(
                 row.get("company", row.get("symbol", "")),
@@ -95,8 +97,23 @@ def run_scan(limit=250, min_score=60, news_limit=6, workers=6):
             )
         except Exception:
             headlines = []
+        return index, headlines
+
+    news_results = []
+    with ThreadPoolExecutor(max_workers=5) as pool:
+        futures = [
+            pool.submit(fetch_candidate_news, index, row)
+            for index, row in shortlist.iterrows()
+        ]
+        for future in as_completed(futures):
+            try:
+                news_results.append(future.result())
+            except Exception:
+                continue
+
+    for index, headlines in news_results:
         adjusted, news_score, adjustment, news_flags = apply_news_overlay(
-            float(row["base_score"]), headlines
+            float(base.at[index, "base_score"]), headlines
         )
         base.at[index, "score"] = adjusted
         base.at[index, "news_score"] = news_score
