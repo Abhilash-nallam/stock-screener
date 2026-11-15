@@ -1,9 +1,9 @@
-"""Reusable scanner used by both Streamlit UI and the Telegram command worker."""
+"""Reusable scanner shared by Telegram commands and the optional Streamlit dashboard."""
 import pandas as pd
 
-from radar.free_data import fetch_many, fetch_nifty, market_context
+from radar.free_data import fetch_many, fetch_market_context
 from radar.ledger import save_daily_picks
-from radar.news import company_news
+from radar.news import company_news, fetch_market_news
 from radar.scoring import apply_news_overlay, score_stock
 from radar.universe import (
     fetch_bse_universe,
@@ -27,8 +27,7 @@ def refresh_exchange(exchange):
 
 
 def refresh_both():
-    results = {}
-    errors = {}
+    results, errors = {}, {}
     for exchange in ("nse", "bse"):
         try:
             results[exchange] = refresh_exchange(exchange)
@@ -46,26 +45,27 @@ def universe_status():
 
 
 def run_scan(limit=250, min_score=60, news_limit=6, workers=6):
-    """Run the full daily-close scan and return two top-five frames and metadata."""
+    """Scan a daily rotating sample and return transparent ranked candidates."""
     limit = int(limit)
     if limit not in (250, 500):
         raise ValueError("Choose 250 or 500 stocks")
 
     universe = load_cached_combined_universe()
     if universe.empty:
-        result = refresh_both()
+        refresh_result = refresh_both()
         universe = load_cached_combined_universe()
         if universe.empty:
-            raise RuntimeError(f"No exchange universe is available. Refresh errors: {result['errors']}")
+            raise RuntimeError(f"No exchange universe is available. Refresh errors: {refresh_result['errors']}")
 
     selected = select_scan_universe(universe, limit)
     if selected.empty:
         raise RuntimeError("The cached exchange universe is empty")
-    downloaded = fetch_many(selected, workers=workers)
-    market = market_context(fetch_nifty())
 
-    results = []
-    histories = {}
+    downloaded = fetch_many(selected, workers=workers)
+    market = fetch_market_context()
+    news_bundle = fetch_market_news()
+
+    results, histories = [], {}
     for meta, history in downloaded:
         try:
             scored = score_stock(meta, history, market)
@@ -81,16 +81,27 @@ def run_scan(limit=250, min_score=60, news_limit=6, workers=6):
     base["news"] = pd.Series([[] for _ in range(len(base))], index=base.index, dtype="object")
     base["news_score"] = pd.NA
     base["news_adjustment"] = 0.0
-    shortlist = base.sort_values("score", ascending=False).head(30)
+    base["news_flags"] = pd.Series([[] for _ in range(len(base))], index=base.index, dtype="object")
+
+    # News requests are limited to the leading 35 technical candidates.
+    shortlist = base.sort_values("score", ascending=False).head(35)
     for index, row in shortlist.iterrows():
         try:
-            headlines = company_news(row.get("company", row.get("symbol", "")), limit=news_limit)
+            headlines = company_news(
+                row.get("company", row.get("symbol", "")),
+                limit=news_limit,
+                official_items=news_bundle["items"],
+                symbol=row.get("symbol", ""),
+            )
         except Exception:
             headlines = []
-        adjusted, news_score, adjustment = apply_news_overlay(float(row["base_score"]), headlines)
+        adjusted, news_score, adjustment, news_flags = apply_news_overlay(
+            float(row["base_score"]), headlines
+        )
         base.at[index, "score"] = adjusted
         base.at[index, "news_score"] = news_score
         base.at[index, "news_adjustment"] = adjustment
+        base.at[index, "news_flags"] = news_flags
         base.at[index, "news"] = headlines
 
     eligible = base[
@@ -116,4 +127,13 @@ def run_scan(limit=250, min_score=60, news_limit=6, workers=6):
         "low": low,
         "high": high,
         "data_date": market.get("data_date") or str(base["data_date"].max()),
+        "news_count": news_bundle["total_items"],
+        "news_sources_working": news_bundle["working_sources"],
+        "news_sources_total": news_bundle["total_sources"],
+        "news_source_status": news_bundle["source_status"],
+        "global_news": news_bundle["global_news"][:6],
+        "official_news": news_bundle["official_news"][:10],
+        "benchmarks": market.get("benchmarks", {}),
+        "nse_selected": int((selected["exchange"].astype(str).str.upper() == "NSE").sum()),
+        "bse_selected": int((selected["exchange"].astype(str).str.upper() == "BSE").sum()),
     }
