@@ -37,6 +37,24 @@ class UniverseSelectionTests(unittest.TestCase):
         self.assertEqual((result["exchange"] == "NSE").sum(), 200)
         self.assertEqual((result["exchange"] == "BSE").sum(), 50)
 
+    def test_daily_rotation_changes_the_selected_symbols(self):
+        nse = pd.DataFrame([
+            {"symbol": f"N{i}", "company": f"NSE {i}", "exchange": "NSE",
+             "sector": "Unknown", "yahoo_symbol": f"N{i}.NS"}
+            for i in range(500)
+        ])
+        bse = pd.DataFrame([
+            {"symbol": str(500000+i), "company": f"BSE {i}", "exchange": "BSE",
+             "sector": "Unknown", "yahoo_symbol": f"{500000+i}.BO"}
+            for i in range(100)
+        ])
+        data = pd.concat([nse, bse], ignore_index=True)
+        first = select_scan_universe(data, 250, as_of=pd.Timestamp("2026-11-15").date())
+        second = select_scan_universe(data, 250, as_of=pd.Timestamp("2026-11-16").date())
+        self.assertNotEqual(first["yahoo_symbol"].tolist(), second["yahoo_symbol"].tolist())
+        self.assertEqual((first["exchange"] == "NSE").sum(), 200)
+        self.assertEqual((first["exchange"] == "BSE").sum(), 50)
+
     def test_only_250_or_500_is_accepted(self):
         with self.assertRaises(ValueError):
             select_scan_universe(pd.DataFrame(), 300)
