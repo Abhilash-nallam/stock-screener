@@ -43,7 +43,9 @@ with st.sidebar:
 
     st.divider()
     st.subheader("Exchange universes")
-    if st.button("Refresh NSE + BSE lists", use_container_width=True):
+    if not admin_enabled:
+        st.caption("Universe refresh is also disabled until the private dashboard password is entered.")
+    if admin_enabled and st.button("Refresh NSE + BSE lists", use_container_width=True):
         with st.spinner("Refreshing official/public exchange lists..."):
             refresh_result = refresh_both()
         for name in ("nse", "bse"):
@@ -51,12 +53,12 @@ with st.sidebar:
                 st.success(f"{name.upper()}: {refresh_result['refreshed'][name]['count']:,} securities")
             elif name in refresh_result["errors"]:
                 st.warning(f"{name.upper()} refresh failed: {refresh_result['errors'][name]}")
-    if st.button("Refresh NSE only", use_container_width=True):
+    if admin_enabled and st.button("Refresh NSE only", use_container_width=True):
         try:
             st.success(f"NSE refreshed: {refresh_exchange('nse')['count']:,} securities")
         except Exception as exc:
             st.error(f"NSE refresh failed: {exc}")
-    if st.button("Refresh BSE only", use_container_width=True):
+    if admin_enabled and st.button("Refresh BSE only", use_container_width=True):
         try:
             st.success(f"BSE refreshed: {refresh_exchange('bse')['count']:,} securities")
         except Exception as exc:
