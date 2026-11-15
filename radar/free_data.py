@@ -109,6 +109,15 @@ def fetch_market_context():
         for future in as_completed(futures):
             series[futures[future]] = future.result()
 
+    # This function supplies the daily baseline only. Exclude today's unfinished
+    # daily candles while NSE is open; the live Groww quote is handled separately.
+    from datetime import datetime
+    from zoneinfo import ZoneInfo
+    india_date = datetime.now(ZoneInfo("Asia/Kolkata")).date()
+    for name, values in list(series.items()):
+        if values is not None and not values.empty:
+            series[name] = values[[pd.Timestamp(index).date() < india_date for index in values.index]]
+
     nifty = series.get("NIFTY", pd.Series(dtype=float))
     empty = {
         "regime": "unknown", "global_risk": "unknown",
