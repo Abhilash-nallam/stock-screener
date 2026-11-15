@@ -122,3 +122,35 @@ def get_market_status(now=None):
         base["next_open"] = nxt.isoformat(timespec="minutes") if nxt else None
         base["next_open_text"] = nxt.strftime("%a %d %b %Y, %I:%M %p IST") if nxt else None
     return base
+
+
+def format_market_status(status):
+    """Human-readable exchange state for Telegram."""
+    phase = str(status.get("phase", "unknown"))
+    date_text = status.get("local_date", "unknown")
+    time_text = status.get("local_time", "unknown")
+    reason = status.get("reason", "No session information")
+    next_open = status.get("next_open_text")
+    if phase == "open":
+        return (
+            "🟢 <b>NSE CASH MARKET IS OPEN</b>\n"
+            f"🗓 {date_text} · {time_text} IST\n"
+            "Live screening is permitted."
+        )
+    labels = {
+        "weekend": "WEEKEND — MARKET CLOSED",
+        "holiday": "EXCHANGE HOLIDAY — MARKET CLOSED",
+        "pre_market": "PRE-MARKET — REGULAR SESSION NOT OPEN",
+        "pre_open": "PRE-OPEN SESSION — WAIT UNTIL 09:15",
+        "post_market": "REGULAR MARKET CLOSED FOR TODAY",
+        "calendar_unverified": "MARKET CALENDAR NOT VERIFIED",
+    }
+    lines = [
+        f"🔴 <b>{labels.get(phase, 'MARKET CLOSED / UNVERIFIED')}</b>",
+        f"🗓 {date_text} · {time_text} IST",
+        f"ℹ️ {reason}",
+    ]
+    if next_open:
+        lines.append(f"⏰ Next regular session: <b>{next_open}</b>")
+    lines.append("No live stock recommendations were generated.")
+    return "\n".join(lines)
