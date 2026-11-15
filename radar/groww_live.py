@@ -56,6 +56,7 @@ def create_access_token(api_key=None, api_secret=None):
                 "Authorization": f"Bearer {api_key}",
                 "Accept": "application/json",
                 "Content-Type": "application/json",
+                "X-API-VERSION": "1.0",
             },
             json={"key_type": "approval", "checksum": checksum, "timestamp": timestamp},
             timeout=TIMEOUT,
@@ -67,7 +68,10 @@ def create_access_token(api_key=None, api_secret=None):
             "Groww could not create a session token. Check the API key/secret and approve "
             "today's API session on Groww Cloud API Keys."
         ) from exc
-    token = body.get("token") if isinstance(body, dict) else None
+    payload = body.get("payload") if isinstance(body, dict) else None
+    token = payload.get("token") if isinstance(payload, dict) else None
+    # Keep a top-level fallback for any legacy response variant.
+    token = token or (body.get("token") if isinstance(body, dict) else None)
     if not token:
         detail = body.get("error", {}).get("message") if isinstance(body, dict) else None
         raise LiveDataUnavailable(
