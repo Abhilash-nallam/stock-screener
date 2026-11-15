@@ -104,6 +104,15 @@ def _money(value):
 def _as_list(value):
     return value if isinstance(value, (list, tuple)) else []
 
+def _number(value, decimals=1):
+    try:
+        number = float(value)
+        if not math.isfinite(number):
+            return "n/a"
+        return f"{number:.{decimals}f}"
+    except (TypeError, ValueError):
+        return "n/a"
+
 
 def _headline_date(item):
     published = str(item.get("published") or "")
@@ -132,7 +141,7 @@ def _stock_card(row, rank):
         f"🎯 <b>Entry reference:</b> {_money(row.get('entry_low'))} – {_money(row.get('entry_high'))}",
         f"🛑 <b>Stop reference:</b> {_money(row.get('stop_loss'))}",
         f"🏁 <b>Targets:</b> T1 {_money(row.get('target1'))}  ·  T2 {_money(row.get('target2'))}",
-        f"⚠️ <b>Risk:</b> {_risk(row.get('risk'))}  |  <b>RSI:</b> {_money(row.get('rsi'))}  |  <b>Rel. volume:</b> {_money(row.get('rvol'))}x",
+        f"⚠️ <b>Risk:</b> {_risk(row.get('risk'))}  |  <b>RSI:</b> {_number(row.get('rsi'))}  |  <b>Rel. volume:</b> {_number(row.get('rvol'), 2)}x",
         f"🧭 <b>Status:</b> {html.escape(str(row.get('setup_status', 'Not assessed')))}",
     ]
 
