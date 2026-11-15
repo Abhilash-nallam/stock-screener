@@ -65,7 +65,7 @@ class LiveSignalTests(unittest.TestCase):
         detail = {"quote": self.detail["quote"], "candles": make_candles()[:2]}
         result = build_live_signal(self.daily, self.snapshot, detail, nifty_change_pct=0, now=self.now)
         self.assertFalse(result["live_eligible"])
-        self.assertIn("need at least 3", result["live_reason"])
+        self.assertIn("need at least 6", result["live_reason"])
 
 
 if __name__ == "__main__":
