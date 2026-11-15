@@ -120,46 +120,47 @@ def _headline_date(item):
 
 
 def _stock_card(row, rank):
-    """Compact, labelled stock card that fits naturally in Telegram."""
+    """Readable live-confirmed card; daily close is context, never the live entry."""
     symbol = html.escape(str(row.get("symbol", "—")))
     company = html.escape(str(row.get("company", "—")))
     exchange = html.escape(str(row.get("exchange", "NSE")).upper())
-    try:
-        score_value = float(row.get("score", 0))
-        score = f"{score_value:.1f}/100" if math.isfinite(score_value) else "n/a"
-    except (TypeError, ValueError):
-        score = "n/a"
+    daily_score = _number(row.get("score"), 1)
+    live_score = _number(row.get("live_score"), 1)
+    live_price = row.get("live_price")
+    live_status = html.escape(str(row.get("live_status", "WAIT")))
+    live_time = html.escape(str(row.get("live_quote_time", "unavailable")))
+    quote_age = row.get("live_quote_age_seconds")
 
     news = _as_list(row.get("news"))
     flags = _as_list(row.get("news_flags"))
-    reasons = _as_list(row.get("reasons"))
-
     lines = [
         f"<b>{rank}. {symbol} — {company}</b> ({exchange})",
-        f"💰 <b>Last close:</b> {_money(row.get('price'))}   |   <b>Model rank:</b> {score}",
-        f"📈 <b>Change:</b> 1D {_pct(row.get('change_1d_pct'))}  ·  5D {_pct(row.get('ret5_pct'))}  ·  20D {_pct(row.get('ret20_pct'))}",
-        f"🎯 <b>Entry reference:</b> {_money(row.get('entry_low'))} – {_money(row.get('entry_high'))}",
-        f"🛑 <b>Stop reference:</b> {_money(row.get('stop_loss'))}",
-        f"🏁 <b>Targets:</b> T1 {_money(row.get('target1'))}  ·  T2 {_money(row.get('target2'))}",
-        f"⚠️ <b>Risk:</b> {_risk(row.get('risk'))}  |  <b>RSI:</b> {_number(row.get('rsi'))}  |  <b>Rel. volume:</b> {_number(row.get('rvol'), 2)}x",
-        f"🧭 <b>Status:</b> {html.escape(str(row.get('setup_status', 'Not assessed')))}",
+        f"💹 <b>LIVE price:</b> {_money(live_price)}  ·  <b>Live score:</b> {live_score}/100",
+        f"   Previous completed close: {_money(row.get('price'))}  ·  Last trade: {live_time}",
+        f"📈 <b>Today:</b> {_pct(row.get('live_change_pct'))}  ·  Opening gap: {_pct(row.get('live_gap_pct'))}  ·  From open: {_pct(row.get('live_intraday_pct'))}",
+        f"🧭 <b>Intraday:</b> VWAP {_money(row.get('live_vwap'))} ({_pct(row.get('live_vwap_distance_pct'))})  ·  3-bar 5m momentum {_pct(row.get('live_5m_momentum_pct'))}",
+        f"🌐 <b>Relative to Nifty:</b> {_pct(row.get('live_relative_strength_pct'))}  ·  5D {_pct(row.get('ret5_pct'))}  ·  20D {_pct(row.get('ret20_pct'))}",
+        f"🎯 <b>Entry zone:</b> {_money(row.get('live_entry_low'))} – {_money(row.get('live_entry_high'))}",
+        f"🛑 <b>Stop:</b> {_money(row.get('live_stop'))}  ·  🏁 <b>Targets:</b> T1 {_money(row.get('live_target1'))}  ·  T2 {_money(row.get('live_target2'))}",
+        f"⚠️ <b>Risk:</b> {_risk(row.get('risk'))}  ·  RSI {_number(row.get('rsi'))}  ·  ATR {_number(row.get('atr_pct'), 2)}%",
+        f"🟢 <b>Decision:</b> {live_status}",
+        f"⏱ <b>Quote age:</b> {_number(quote_age, 0)} sec  ·  <b>Daily score:</b> {daily_score}/100",
     ]
-
-    if reasons:
-        reason_text = " • ".join(str(x) for x in reasons[:2])
-        lines.append(f"🔎 <b>Why ranked:</b> {html.escape(reason_text[:260])}")
+    reason = str(row.get("live_reason") or "")
+    if reason:
+        lines.append(f"🔎 <b>Confirmation:</b> {html.escape(reason[:240])}")
     if flags:
-        lines.append(f"🚩 <b>Risk flags:</b> {html.escape('; '.join(str(x) for x in flags)[:220])}")
+        lines.append(f"🚩 <b>Daily risk flags:</b> {html.escape('; '.join(str(x) for x in flags)[:180]}")
     if news:
         top = news[0]
         source = html.escape(str(top.get("publisher") or top.get("source") or "News"))
-        title = html.escape(str(top.get("title") or "")[:180])
+        title = html.escape(str(top.get("title") or "")[:160])
         date = html.escape(_headline_date(top))
         link = str(top.get("link") or "")
         if link.startswith(("https://", "http://")):
-            lines.append(f"📰 <b>Relevant news ({date}):</b> <a href=\"{html.escape(link, quote=True)}\">{title}</a> · {source}")
+            lines.append(f"📰 <b>Company news ({date}):</b> <a href=\"{html.escape(link, quote=True)}\">{title}</a> · {source}")
         else:
-            lines.append(f"📰 <b>Relevant news ({date}):</b> {title} · {source}")
+            lines.append(f"📰 <b>Company news ({date}):</b> {title} · {source}")
     return "\n".join(lines)
 
 
@@ -173,10 +174,10 @@ def _benchmark_line(label, item):
 
 
 def _bucket_messages(title, rows):
-    """Build one readable price-band message; split safely before Telegram's limit."""
-    heading = f"<b>{title}</b>\n<i>Rank is a model score, not a probability of profit.</i>"
+    """Build one readable live price-band message; split safely before Telegram's limit."""
+    heading = f"<b>{title}</b>\n<i>Only live-confirmed watchlist candidates are shown; no automatic orders.</i>"
     if rows.empty:
-        return [heading + "\n\n⚪ No stock in this price band passed all quality filters."]
+        return [heading + "\n\n⚪ No stock in this band passed the live confirmation gates. Wait or re-scan later."]
 
     messages = []
     current = heading
@@ -193,7 +194,27 @@ def _bucket_messages(title, rows):
 
 
 def format_scan_messages(result):
-    """Format a scan as distinct, compact Telegram messages."""
+    """Format market state or a live-confirmed report; never call daily-only picks live."""
+    session = result.get("market_session") or {}
+    phase = str(session.get("phase", "unknown"))
+    if phase != "open":
+        from radar.market_clock import format_market_status
+        return [format_market_status(session)]
+
+    if not result.get("live_ready", False):
+        reason = html.escape(str(result.get("live_error") or "Live market data is unavailable.")[:900])
+        return [
+            "<b>🟠 INDIA STOCK RADAR — LIVE SCAN BLOCKED</b>\n"
+            f"🟢 NSE session: <b>OPEN</b> ({html.escape(str(session.get('local_time', '')))} IST)\n"
+            "No stock recommendations were generated because a reliable live-data check did not complete.\n\n"
+            f"<b>Reason:</b> {reason}\n\n"
+            "<b>Setup needed:</b> Add Groww API credentials as GitHub Actions secrets: "
+            "<code>GROWW_ACCESS_TOKEN</code>, or <code>GROWW_API_KEY</code> and <code>GROWW_API_SECRET</code>.\n"
+            "Groww's API-key/secret flow requires daily approval on its Cloud API Keys page. "
+            "A manually generated access token expires daily at 06:00 IST.\n"
+            "<i>Yahoo daily prices are not substituted for live quotes.</i>"
+        ]
+
     market = result.get("market") or {}
     regime = str(market.get("regime", "unknown")).upper()
     regime_icon = "🟢" if regime == "BULLISH" else "🔴" if regime == "BEARISH" else "🟡"
@@ -203,29 +224,36 @@ def format_scan_messages(result):
     data_date = html.escape(str(result.get("data_date") or "unavailable"))
     selected = int(result.get("selected_count", 0) or 0)
     usable = int(result.get("success_count", 0) or 0)
-    coverage = (100.0 * usable / selected) if selected else 0.0
+    daily_coverage = (100.0 * usable / selected) if selected else 0.0
+    breadth = result.get("live_breadth") or {}
     header_lines = [
-        "<b>🇮🇳 INDIA STOCK RADAR — SCAN SUMMARY</b>",
-        f"🗓 <b>Price data through:</b> {data_date} (last available daily close)",
-        f"🇮🇳 <b>Nifty trend:</b> {regime_icon} {html.escape(regime)}",
-        f"   Last session: {_pct(market.get('nifty_change_1d'))}  |  5 sessions: {_pct(market.get('nifty_change_5d'))}",
+        "<b>🇮🇳 INDIA STOCK RADAR — LIVE SCAN</b>",
+        f"🟢 <b>NSE session:</b> OPEN · {html.escape(str(session.get('local_time', '')))} IST",
+        f"⏱ <b>Live provider:</b> Groww Live Data API · quote coverage {result.get('live_coverage_pct', 0):.1f}% "
+        f"({result.get('live_coverage_count', 0)}/{result.get('live_coverage_total', 0)} NSE stocks)",
+        f"🗓 <b>Technical baseline:</b> completed daily close through {data_date} (today's unfinished daily bar excluded)",
+        f"🇮🇳 <b>Nifty LIVE:</b> {_pct(result.get('live_nifty_change_pct'))} vs previous close · "
+        f"daily trend {regime_icon} {html.escape(regime)}",
+        f"📊 <b>Live breadth:</b> 🟢 {breadth.get('advances', 0)} advances · 🔴 {breadth.get('declines', 0)} declines · "
+        f"⚪ {breadth.get('unchanged', 0)} unchanged",
         f"🌍 <b>Global risk:</b> {global_icon} {html.escape(global_risk)} "
         f"({market.get('global_positive_count', 0)}/{market.get('global_count', 0)} global indices positive over 5 sessions)",
-        f"🔎 <b>Universe scan:</b> {usable}/{selected} usable histories ({coverage:.1f}%)",
-        f"   Selected: {result.get('nse_selected', 0)} NSE + {result.get('bse_selected', 0)} BSE",
-        f"   Qualified watchlist candidates: {result.get('candidate_count', 0)}",
+        f"🔎 <b>Daily universe:</b> {usable}/{selected} usable histories ({daily_coverage:.1f}%) · "
+        f"{result.get('nse_selected', 0)} NSE + {result.get('bse_selected', 0)} BSE selected",
+        f"🧪 <b>Intraday checks:</b> {result.get('live_researched_count', 0)} leaders researched · "
+        f"{result.get('live_confirmed_count', 0)} confirmed · {result.get('live_wait_count', 0)} waiting",
         f"📰 <b>Broad news feeds:</b> {result.get('news_count', 0)} headlines · "
         f"{result.get('news_sources_working', 0)}/{result.get('news_sources_total', 0)} sources responding",
-        "<i>Company searches are separately run for the leading 35 technical candidates.</i>",
-        "<i>Daily-close research only: levels are reference zones, not live orders. A higher model rank is not a profit probability or guarantee.</i>",
+        "<i>Signals require a fresh trade timestamp, live quote, VWAP and completed 5-minute candles. "
+        "This is a watchlist, not a buy/sell order or profit guarantee.</i>",
     ]
     messages = ["\n".join(header_lines)]
 
     benchmarks = market.get("benchmarks", {}) or {}
     india_lines = ["<b>🇮🇳 INDIA MARKET</b>"]
     india_lines.append(
-        f"• <b>NIFTY 50 trend:</b> {html.escape(regime)} · "
-        f"1D {_pct(market.get('nifty_change_1d'))} · 5D {_pct(market.get('nifty_change_5d'))}"
+        f"• <b>NIFTY 50 LIVE:</b> {_pct(result.get('live_nifty_change_pct'))} vs previous close · "
+        f"daily trend {html.escape(regime)}"
     )
     for key, label in (("SENSEX", "SENSEX"), ("INDIA_VIX", "India VIX")):
         if key in benchmarks:
@@ -245,8 +273,7 @@ def format_scan_messages(result):
         if key in benchmarks:
             macro_lines.append(_benchmark_line(label, benchmarks[key]))
 
-    market_sections = india_lines + [""] + global_lines + [""] + macro_lines
-    messages.append("\n".join(market_sections))
+    messages.append("\n".join(india_lines + [""] + global_lines + [""] + macro_lines))
 
     headline_lines = ["<b>📰 RELEVANT NEWS & OFFICIAL UPDATES</b>"]
     for title, key in (("Global market headlines", "global_news"),
@@ -267,10 +294,9 @@ def format_scan_messages(result):
                 headline_lines.append(f"• {text} — {source} · {date}")
     messages.append("\n".join(headline_lines))
 
-    messages.extend(_bucket_messages("🟢 TOP CANDIDATES — PRICE ≤ ₹1,000", result["low"]))
-    messages.extend(_bucket_messages("🔵 TOP CANDIDATES — PRICE > ₹1,000", result["high"]))
+    messages.extend(_bucket_messages("🟢 LIVE-CONFIRMED CANDIDATES — PRICE ≤ ₹1,000", result["low"]))
+    messages.extend(_bucket_messages("🔵 LIVE-CONFIRMED CANDIDATES — PRICE > ₹1,000", result["high"]))
     return messages
-
 
 def show_menu(chat_id, greeting=True):
     message = (
