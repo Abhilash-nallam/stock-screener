@@ -257,11 +257,12 @@ def _load_cached_universe(path, exchange):
     frame["exchange"] = frame["exchange"].astype(str).str.strip().str.upper()
     frame["yahoo_symbol"] = frame["yahoo_symbol"].astype(str).str.strip().str.upper()
     suffix = ".NS" if exchange == "NSE" else ".BO"
+    symbol_pattern = r"[A-Z0-9&_-]+" if exchange == "NSE" else r"\d+"
     frame = frame[
         frame["exchange"].eq(exchange)
-        & frame["symbol"].ne("")
+        & frame["symbol"].str.fullmatch(symbol_pattern, na=False)
         & frame["company"].ne("")
-        & frame["yahoo_symbol"].str.endswith(suffix)
+        & frame["yahoo_symbol"].eq(frame["symbol"] + suffix)
     ]
     frame = frame.drop_duplicates("yahoo_symbol").reset_index(drop=True)
     return frame[["symbol", "company", "exchange", "sector", "isin", "yahoo_symbol"]]
