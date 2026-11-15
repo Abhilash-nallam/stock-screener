@@ -9,6 +9,7 @@ APIs and never claims a Yahoo candle close is an exchange live last-traded price
 """
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import pandas as pd
+from datetime import datetime, timedelta, timezone
 
 from radar.free_data import (
     fetch_many,
@@ -28,6 +29,7 @@ from radar.universe import (
     load_cached_combined_universe,
     load_cached_nse_universe,
     load_cached_bse_universe,
+    read_refresh_status,
     select_scan_universe,
 )
 
@@ -61,32 +63,42 @@ def universe_status():
     }
 
 
+def _cache_needs_refresh(exchange, max_age_days=7):
+    """Treat unknown or older-than-seven-day cache metadata as stale."""
+    metadata = read_refresh_status().get(exchange, {})
+    updated = metadata.get("updated_at_utc") if isinstance(metadata, dict) else None
+    if not updated:
+        return True
+    try:
+        stamp = datetime.fromisoformat(str(updated).replace("Z", "+00:00"))
+        if stamp.tzinfo is None:
+            stamp = stamp.replace(tzinfo=timezone.utc)
+        age = datetime.now(timezone.utc) - stamp.astimezone(timezone.utc)
+        return age < timedelta(minutes=-5) or age > timedelta(days=max_age_days)
+    except (TypeError, ValueError):
+        return True
+
+
 def ensure_exchange_universes():
-    """Refresh NSE and BSE caches independently when either exchange is missing."""
+    """Refresh stale exchange caches independently; preserve usable old cache on failure."""
     errors = {}
-    try:
-        nse = load_cached_nse_universe()
-    except Exception as exc:
-        nse = pd.DataFrame()
-        errors["nse_cache"] = str(exc)
-    try:
-        bse = load_cached_bse_universe()
-    except Exception as exc:
-        bse = pd.DataFrame()
-        errors["bse_cache"] = str(exc)
-
-    if nse.empty:
+    for exchange, loader in (("nse", load_cached_nse_universe), ("bse", load_cached_bse_universe)):
         try:
-            refresh_exchange("nse")
+            cached = loader()
         except Exception as exc:
-            errors["nse"] = str(exc)
-    if bse.empty:
-        try:
-            refresh_exchange("bse")
-        except Exception as exc:
-            errors["bse"] = str(exc)
-
+            cached = pd.DataFrame()
+            errors[f"{exchange}_cache"] = str(exc)
+        if cached.empty or _cache_needs_refresh(exchange):
+            try:
+                refresh_exchange(exchange)
+            except Exception as exc:
+                errors[exchange] = str(exc)
+                # Keep a valid older cache if present, but report that it is stale.
+    nse = load_cached_nse_universe()
+    bse = load_cached_bse_universe()
     universe = load_cached_combined_universe()
+    if errors and universe.empty:
+        errors["combined"] = "No valid cached securities remained after refresh failures."
     return universe, errors
 
 
