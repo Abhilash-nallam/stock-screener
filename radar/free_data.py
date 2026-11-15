@@ -4,8 +4,14 @@ Yahoo/yfinance is an unofficial public data route: availability, delay and
 completeness are not guaranteed. Do not use these quotes for order execution.
 """
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from datetime import datetime, timedelta, time as clock_time
+from zoneinfo import ZoneInfo
+
 import pandas as pd
 import yfinance as yf
+
+IST = ZoneInfo("Asia/Kolkata")
+YAHOO_INTRADAY_PROVIDER = "Yahoo Finance public 5-minute chart data (delay/availability not guaranteed)"
 
 
 def fetch_daily_history(symbol, period="1y"):
@@ -183,3 +189,117 @@ def fetch_market_context():
 def fetch_nifty():
     """Legacy helper retained for compatibility."""
     return fetch_daily_history("^NSEI")
+
+
+def fetch_intraday_5m_snapshot(symbol, now=None, session_open=None):
+    """Fetch the latest completed free Yahoo 5-minute bars for one NSE/BSE ticker.
+
+    This is not an exchange-certified real-time feed. The returned price is the
+    latest completed 5-minute candle close, not a live last-traded quote.
+    """
+    current = now or datetime.now(IST)
+    if current.tzinfo is None:
+        current = current.replace(tzinfo=IST)
+    else:
+        current = current.astimezone(IST)
+
+    try:
+        frame = yf.download(
+            str(symbol),
+            period="1d",
+            interval="5m",
+            auto_adjust=False,
+            prepost=False,
+            progress=False,
+            threads=False,
+            timeout=18,
+        )
+    except Exception:
+        return None
+    if frame is None or frame.empty:
+        return None
+    if isinstance(frame.columns, pd.MultiIndex):
+        frame.columns = frame.columns.get_level_values(0)
+    frame = frame.rename(columns=str.title)
+    required = ["Open", "High", "Low", "Close", "Volume"]
+    if not set(required).issubset(frame.columns):
+        return None
+
+    try:
+        frame = frame[required].apply(pd.to_numeric, errors="coerce").dropna()
+    except Exception:
+        return None
+    if frame.empty:
+        return None
+
+    # yfinance timestamps for Indian symbols are generally timezone-aware.
+    # If they are naive, interpret them as India local time, never as UTC.
+    current_date = current.date()
+    completed_before = current.replace(
+        minute=(current.minute // 5) * 5, second=0, microsecond=0
+    )
+    start_time = session_open or clock_time(9, 15)
+    candles = []
+    for stamp, row in frame.iterrows():
+        ts = pd.Timestamp(stamp)
+        if ts.tzinfo is None:
+            ts = ts.tz_localize(IST)
+        else:
+            ts = ts.tz_convert(IST)
+        bar_start = ts.to_pydatetime()
+        if bar_start.date() != current_date:
+            continue
+        if bar_start.time().replace(tzinfo=None) < start_time:
+            continue
+        # Exclude the currently forming 5-minute bar.
+        if bar_start >= completed_before:
+            continue
+        try:
+            candle = {
+                "time": bar_start,
+                "open": float(row["Open"]),
+                "high": float(row["High"]),
+                "low": float(row["Low"]),
+                "close": float(row["Close"]),
+                "volume": float(row["Volume"]),
+            }
+        except (TypeError, ValueError):
+            continue
+        if candle["close"] > 0 and candle["volume"] >= 0:
+            candles.append(candle)
+
+    candles.sort(key=lambda item: item["time"])
+    if not candles:
+        return None
+
+    first = candles[0]
+    last = candles[-1]
+    last_bar_end = last["time"] + timedelta(minutes=5)
+    age_seconds = max(0.0, (current - last_bar_end).total_seconds())
+    snapshot = {
+        "price": last["close"],
+        "ohlc": {
+            "open": first["open"],
+            "high": max(item["high"] for item in candles),
+            "low": min(item["low"] for item in candles),
+            "close": last["close"],
+        },
+        "received_at": current,
+        "bar_end_at": last_bar_end,
+        "provider": YAHOO_INTRADAY_PROVIDER,
+        "price_type": "last_completed_5m_candle_close",
+    }
+    detail = {
+        "quote": {
+            # This is a candle end timestamp, NOT an exchange last-trade timestamp.
+            "last_update_time": int(last_bar_end.timestamp() * 1000),
+            "last_trade_time": None,
+            "source": YAHOO_INTRADAY_PROVIDER,
+        },
+        "candles": candles,
+        "provider": YAHOO_INTRADAY_PROVIDER,
+        "timestamp_label": "last completed 5m candle",
+        "max_age_seconds": 600,
+        "age_seconds": round(age_seconds, 1),
+    }
+    return {"snapshot": snapshot, "detail": detail}
