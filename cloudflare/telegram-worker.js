@@ -252,8 +252,13 @@ async function registerWebhook(request, env) {
   } catch {
     return json({ ok: false, error: "Provide a valid HTTPS webhook_url." }, 400);
   }
-  if (webhookUrl.protocol !== "https:" || !webhookUrl.pathname.endsWith("/telegram/webhook")) {
-    return json({ ok: false, error: "Webhook URL must be HTTPS and end in /telegram/webhook." }, 400);
+  const requestHost = new URL(request.url).hostname;
+  if (
+    webhookUrl.protocol !== "https:" ||
+    webhookUrl.hostname !== requestHost ||
+    !webhookUrl.pathname.endsWith("/telegram/webhook")
+  ) {
+    return json({ ok: false, error: "Webhook URL must use this Worker host, HTTPS and end in /telegram/webhook." }, 400);
   }
   const secret = String(env.TELEGRAM_WEBHOOK_SECRET || "");
   if (!/^[A-Za-z0-9_-]{32,256}$/.test(secret)) {
