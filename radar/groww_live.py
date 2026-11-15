@@ -111,21 +111,21 @@ class GrowwLiveClient:
         )
         return {str(key): parse_ohlc(value) for key, value in payload.items()}
 
-    def get_quote(self, trading_symbol):
+    def get_quote(self, trading_symbol, exchange="NSE"):
         payload = self._get_payload(
             "/v1/live-data/quote",
-            {"exchange": "NSE", "segment": "CASH", "trading_symbol": trading_symbol},
+            {"exchange": exchange.upper(), "segment": "CASH", "trading_symbol": trading_symbol},
             "quote",
         )
         return payload
 
-    def get_5m_candles(self, trading_symbol, start_time, end_time):
+    def get_5m_candles(self, trading_symbol, start_time, end_time, exchange="NSE"):
         payload = self._get_payload(
             "/v1/historical/candles",
             {
-                "exchange": "NSE",
+                "exchange": exchange.upper(),
                 "segment": "CASH",
-                "groww_symbol": f"NSE-{trading_symbol}",
+                "groww_symbol": f"{exchange.upper()}-{trading_symbol}",
                 "start_time": start_time,
                 "end_time": end_time,
                 "candle_interval": "5minute",
@@ -168,23 +168,39 @@ def parse_ohlc(value):
     return result
 
 
-def fetch_live_snapshots(client, symbols, batch_size=50):
-    """Fetch current LTP and current-session OHLC for a set of NSE symbols."""
-    unique = list(dict.fromkeys(str(symbol).strip().upper() for symbol in symbols if str(symbol).strip()))
+def fetch_live_snapshots(client, instruments, batch_size=50):
+    """Fetch live LTP and session OHLC for [(exchange, trading_symbol), ...]."""
+    unique = []
+    seen = set()
+    for item in instruments:
+        if isinstance(item, dict):
+            exchange = str(item.get("exchange", "NSE")).upper()
+            symbol = str(item.get("symbol", "")).strip().upper()
+        else:
+            exchange, symbol = item
+            exchange, symbol = str(exchange).upper(), str(symbol).strip().upper()
+        if exchange not in ("NSE", "BSE") or not symbol:
+            continue
+        key = f"{exchange}_{symbol}"
+        if key not in seen:
+            seen.add(key)
+            unique.append((exchange, symbol, key))
     ltp, ohlc = {}, {}
-    for offset in range(0, len(unique), min(50, max(1, int(batch_size)))):
-        chunk = unique[offset:offset + min(50, max(1, int(batch_size)))]
-        exchange_symbols = [f"NSE_{symbol}" for symbol in chunk]
+    size = min(50, max(1, int(batch_size)))
+    for offset in range(0, len(unique), size):
+        chunk = unique[offset:offset + size]
+        exchange_symbols = [key for _, _, key in chunk]
         ltp.update(client.get_ltp(exchange_symbols))
         ohlc.update(client.get_ohlc(exchange_symbols))
-        # Groww publishes a 10 requests/second Live Data rate limit.
-        time.sleep(0.12)
+        # Groww Live Data rate limit: 10 requests/second.
+        time.sleep(0.13)
     fetched_at = datetime.now(IST)
     snapshots = {}
-    for symbol in unique:
-        key = f"NSE_{symbol}"
+    for exchange, symbol, key in unique:
         if key in ltp and key in ohlc:
-            snapshots[symbol] = {
+            snapshots[key] = {
+                "exchange": exchange,
+                "symbol": symbol,
                 "price": ltp[key],
                 "ohlc": ohlc[key],
                 "received_at": fetched_at,
@@ -240,16 +256,17 @@ def normalise_5m_candles(rows, now=None):
     return sorted(result, key=lambda item: item["time"])
 
 
-def fetch_candidate_detail(client, symbol, now=None):
-    """Get quote and 5-minute candles for one shortlisted NSE instrument."""
+def fetch_candidate_detail(client, symbol, now=None, exchange="NSE"):
+    """Get a quote and completed 5-minute candles for a shortlisted instrument."""
     current = now or datetime.now(IST)
     current = current.astimezone(IST) if current.tzinfo else current.replace(tzinfo=IST)
     start = current.replace(hour=9, minute=15, second=0, microsecond=0)
-    quote = client.get_quote(symbol)
+    quote = client.get_quote(symbol, exchange=exchange)
     raw_candles = client.get_5m_candles(
         symbol,
         start.strftime("%Y-%m-%d %H:%M:%S"),
         current.strftime("%Y-%m-%d %H:%M:%S"),
+        exchange=exchange,
     )
     return {
         "quote": quote,
