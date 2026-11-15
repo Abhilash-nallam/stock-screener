@@ -37,6 +37,7 @@ class TelegramFormattingTests(unittest.TestCase):
 
     def test_scan_report_has_readable_sections_and_price_buckets(self):
         result = {
+            "market_session": {"phase": "open", "local_time": "09:46:00"},
             "market": {
                 "regime": "bullish", "nifty_change_1d": -0.5, "nifty_change_5d": 2.3,
                 "global_risk": "risk_on", "global_positive_count": 5, "global_count": 6,
