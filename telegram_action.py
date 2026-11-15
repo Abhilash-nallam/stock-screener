@@ -1,22 +1,15 @@
 """Entry point for scan/refresh jobs dispatched by the Telegram webhook."""
-import os
 import html
+import os
+import sys
+import traceback
 
 from radar.scan_service import refresh_both, refresh_exchange, run_scan, universe_status
 from radar.telegram import send_telegram
 from telegram_bot import format_scan_messages
 
 
-def main():
-    command = os.getenv("RADAR_COMMAND", "").strip()
-    stock_limit = os.getenv("RADAR_STOCK_LIMIT", "250").strip()
-    chat_id = os.getenv("TELEGRAM_CHAT_ID", "").strip()
-
-    if not chat_id:
-        raise RuntimeError("Repository secret TELEGRAM_CHAT_ID is missing.")
-    if not os.getenv("TELEGRAM_BOT_TOKEN", "").strip():
-        raise RuntimeError("Repository secret TELEGRAM_BOT_TOKEN is missing.")
-
+def execute(command, stock_limit, chat_id):
     if command == "scan":
         if stock_limit not in ("250", "500"):
             raise ValueError("Stock limit must be 250 or 500.")
@@ -62,6 +55,35 @@ def main():
         return
 
     raise ValueError(f"Unsupported Telegram action: {command}")
+
+
+def main():
+    command = os.getenv("RADAR_COMMAND", "").strip()
+    stock_limit = os.getenv("RADAR_STOCK_LIMIT", "250").strip()
+    chat_id = os.getenv("TELEGRAM_CHAT_ID", "").strip()
+
+    if not chat_id:
+        raise RuntimeError("Repository secret TELEGRAM_CHAT_ID is missing.")
+    if not os.getenv("TELEGRAM_BOT_TOKEN", "").strip():
+        raise RuntimeError("Repository secret TELEGRAM_BOT_TOKEN is missing.")
+
+    try:
+        execute(command, stock_limit, chat_id)
+    except Exception as exc:
+        print("Telegram radar action failed:", repr(exc), file=sys.stderr)
+        traceback.print_exc()
+        # Inform the authorised user even when a scan or exchange endpoint fails.
+        try:
+            safe_message = html.escape(str(exc)[:1000])
+            send_telegram(
+                "❌ <b>INDIA STOCK RADAR — request failed</b>\n" + safe_message +
+                "\n\nNo recommendation report was generated. Check the GitHub Actions log for details.",
+                chat_id=chat_id,
+                parse_mode="HTML",
+            )
+        except Exception as notify_exc:
+            print("Could not notify Telegram chat:", repr(notify_exc), file=sys.stderr)
+        raise
 
 
 if __name__ == "__main__":
