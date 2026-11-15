@@ -105,3 +105,33 @@ The dashboard uses a local CSV ledger under `data/recommendation_ledger.csv`. Th
 - Rotate any token ever committed publicly.
 - Restrict the Telegram bot to your personal chat ID.
 - Use a fine-grained GitHub token with repository-only Actions write permission.
+
+
+## Model v2 data coverage (latest upgrade)
+
+### Market data and indicators
+- One-year adjusted daily OHLCV via Yahoo Finance/yfinance where available (unofficial, potentially delayed/incomplete; not a live quote feed).
+- India benchmarks: Nifty 50, Sensex and India VIX. Global benchmarks: S&P 500, Nasdaq, Dow, FTSE, Nikkei and Hang Seng. Macro proxies: USD/INR, Brent and gold.
+- Technical factors: EMA20/50/200 when enough bars exist, Wilder-style RSI/ATR, MACD histogram, ADX, 5/20/60/120-session momentum, multi-horizon relative strength versus Nifty, 55-session-high proximity, volume, traded-value liquidity and market regime.
+
+### News and official sources attempted on each scan
+- NSE RSS: announcements, daily buyback, shareholding-pattern, BRSR filings and circulars.
+- BSE corporate announcements RSS.
+- SEBI RSS, RBI press-release/notification RSS and PIB government-release RSS.
+- GDELT DOC multilingual global news query for India/global markets, central banks, geopolitics, tariffs, crude, semiconductors and related macro topics.
+- Google News RSS company-specific query for the leading 35 preliminary technical candidates.
+- Stories carry source, timestamp and URL; duplicates and items older than five days are filtered when timestamps exist. The source-health summary shows which feeds responded during each scan. Company-news queries run in a bounded concurrent pool.
+
+### Coverage limits — read before relying on a report
+This is a curated feed-and-query system, not a crawl of every Indian or global website. It cannot guarantee finding every article, filing, social post, interview or analyst view. Company-specific searches are performed only for the leading 35 preliminary candidates; the global and official feeds are ingested more broadly. Headline sentiment is keyword-based, not full-article interpretation, and can misread context, negation or entity names. GDELT and public RSS providers may rate-limit or be unavailable.
+
+The NSE list is fetched from its public EQ CSV. BSE scrip-list refresh has returned HTTP 403 in this deployment; when so, the bot must report the failure and retain any existing cache. A BSE announcements feed is separate from the BSE scrip-master endpoint. Do not assume complete BSE universe coverage until refresh succeeds.
+
+### Rotating universe
+A 250-stock request selects up to 200 NSE plus 50 BSE-exclusive names; a 500-stock request selects up to 400 plus 100. The start point rotates by India calendar date, avoiding the prior alphabetical-first-symbol bias. A scan is a sample per request, not a simultaneous scan of all listed companies; price-fetch failures reduce coverage and are reported.
+
+### Interpretation
+The score is a transparent heuristic ranking, not a calibrated probability of profit or guaranteed prediction. The model still lacks a complete audited-fundamentals feed, official delivery-volume history, complete FII/DII flows, institutional order-book data and a full exchange-filings document parser. Entry, stop and target levels use the last available adjusted daily close and ATR; they are not live quotes or trade orders.
+
+## Hosting clarification
+Streamlit is optional and only hosts the visual dashboard. The Telegram workflow does not pass through Streamlit: Telegram -> Cloudflare Worker -> GitHub Actions -> Python scanner -> Telegram. GitHub Actions runs a temporary cloud runner only when a Telegram command dispatches a job.
