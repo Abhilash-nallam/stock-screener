@@ -68,6 +68,44 @@ TAGS = {
     "geopolitics": ("war", "sanction", "conflict", "trade restriction", "ceasefire"),
     "technology": ("semiconductor", "artificial intelligence", "ai chip", "cloud", "cyber"),
 }
+
+GLOBAL_MARKET_TERMS = (
+    "stock market", "stock markets", "share market", "equity market", "equity markets",
+    "stocks", "shares", "equities", "bond", "bonds", "treasury", "yield", "yields",
+    "central bank", "federal reserve", "bank of england", "bank of japan", "bank of korea",
+    "interest rate", "interest rates", "rate cut", "rate hike", "monetary policy",
+    "inflation", "deflation", "gdp", "gross domestic product", "economic growth",
+    "economy", "economic outlook", "recession", "fiscal deficit", "government debt",
+    "currency", "currencies", "forex", "foreign exchange", "rupee", "dollar",
+    "tariff", "tariffs", "trade war", "trade deal", "trade agreement", "sanctions",
+    "crude oil", "oil prices", "brent", "opec", "natural gas", "gold prices",
+    "commodities", "commodity", "copper", "semiconductor", "semiconductors", "chipmaker",
+    "earnings", "corporate profit", "company profits", "revenue", "default", "credit rating",
+    "banking sector", "lender", "lenders", "financial sector", "financial markets",
+    "ipo", "merger", "acquisition", "bankruptcy", "capital expenditure", "supply chain",
+    "export", "exports", "import", "imports", "investment", "investor", "investors",
+    "market regulator", "securities regulator", "sebi", "rbi", "fii", "fpi", "dii",
+)
+COMPANY_NOISE_PATTERNS = (
+    r"\bstock price\b", r"\bstock quote\b", r"\bshare price\b",
+    r"\bquote and history\b", r"\bhistorical data\b", r"\bcompany profile\b",
+    r"\bfinancials and stock price\b", r"\bstock forecast\b",
+    r"\bmarket data and news\b", r"\bprice, news, quote\b",
+    r"\bnews, quote and history\b", r"\byahoo finance\b.*\bstock\b",
+)
+
+
+def _is_market_relevant(title, summary=""):
+    """Keep global-news feed entries with a clear economy/market connection."""
+    text = _clean(str(title or "") + " " + str(summary or "")).lower()
+    return any(term in text for term in GLOBAL_MARKET_TERMS)
+
+
+def _is_company_noise(title):
+    text = _clean(title).lower()
+    return any(re.search(pattern, text) for pattern in COMPANY_NOISE_PATTERNS)
+
+
 COMMON_COMPANY_WORDS = {
     "limited", "ltd", "india", "industries", "industry", "company", "corporation",
     "corporate", "private", "pvt", "the", "and", "of", "inc", "holdings", "holding",
@@ -165,13 +203,17 @@ def _fetch_feed(spec):
                     published = time.strftime("%a, %d %b %Y %H:%M:%S +0000", entry.published_parsed)
                 except Exception:
                     pass
+            title = entry.get("title", "")
+            summary = entry.get("summary", "")
+            if source_type == "global" and not _is_market_relevant(title, summary):
+                continue
             item = _normalise_item(
-                entry.get("title", ""),
+                title,
                 entry.get("link", url),
                 published,
                 name,
                 source_type,
-                entry.get("summary", ""),
+                summary,
                 entry.get("author", name),
             )
             if item:
@@ -221,8 +263,11 @@ def _fetch_gdelt():
         articles = body.get("articles", []) if isinstance(body, dict) else []
         items = []
         for article in articles:
+            title = article.get("title", "")
+            if not _is_market_relevant(title):
+                continue
             item = _normalise_item(
-                article.get("title", ""),
+                title,
                 article.get("url", ""),
                 article.get("seendate", ""),
                 "GDELT Global News",
@@ -314,8 +359,11 @@ def _google_company_news(company, limit):
                 except Exception:
                     pass
             publisher = entry.get("source", {}).get("title", "Google News")
+            title = entry.get("title", "")
+            if _is_company_noise(title):
+                continue
             item = _normalise_item(
-                entry.get("title", ""), entry.get("link", ""), published,
+                title, entry.get("link", ""), published,
                 "Google News", "company_news", entry.get("summary", ""), publisher
             )
             if item:
@@ -331,7 +379,11 @@ def company_news(company, limit=6, official_items=None, symbol=""):
         item for item in (official_items or [])
         if _matches_company(item, company, symbol)
     ]
-    google_items = _google_company_news(company, limit)
+    google_items = [
+        item for item in _google_company_news(company, limit)
+        if not _is_company_noise(item.get("title", ""))
+        and _matches_company(item, company, symbol)
+    ]
     merged = _dedupe(matched + google_items)
     # Prefer primary exchange/regulator evidence over repeated aggregator copies.
     merged.sort(key=lambda x: (
