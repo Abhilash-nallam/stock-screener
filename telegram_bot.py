@@ -240,6 +240,7 @@ def format_scan_messages(result):
         f"({market.get('global_positive_count', 0)}/{market.get('global_count', 0)} global indices positive over 5 sessions)",
         f"🔎 <b>Daily universe:</b> {usable}/{selected} usable histories ({daily_coverage:.1f}%) · "
         f"{result.get('nse_selected', 0)} NSE + {result.get('bse_selected', 0)} BSE selected",
+        "⚠️ <b>BSE live coverage:</b> Not enabled yet; live-confirmed picks are NSE only. BSE scrip-code mapping is still required.",
         f"🧪 <b>Intraday checks:</b> {result.get('live_researched_count', 0)} leaders researched · "
         f"{result.get('live_confirmed_count', 0)} confirmed · {result.get('live_wait_count', 0)} waiting",
         f"📰 <b>Broad news feeds:</b> {result.get('news_count', 0)} headlines · "
