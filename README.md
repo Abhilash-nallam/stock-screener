@@ -120,6 +120,7 @@ The dashboard uses a local CSV ledger under `data/recommendation_ledger.csv`. Th
 - SEBI RSS, RBI press-release/notification RSS and PIB government-release RSS.
 - GDELT DOC multilingual global news query for India/global markets, central banks, geopolitics, tariffs, crude, semiconductors and related macro topics.
 - Global RSS headlines: BBC World/Business/Asia, CNBC World/Asia/Economy and The Guardian Business.
+- Global RSS headlines: BBC World/Business/Asia, CNBC World/Asia/Economy and The Guardian Business.
 - Google News RSS company-specific query for the leading 35 preliminary technical candidates.
 - Stories carry source, timestamp and URL; duplicates and items older than five days are filtered when timestamps exist. The source-health summary shows which feeds responded during each scan. Company-news queries run in a bounded concurrent pool.
 
