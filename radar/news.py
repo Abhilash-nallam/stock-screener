@@ -21,11 +21,11 @@ MAX_AGE_HOURS = 120
 
 OFFICIAL_FEEDS = [
     ("NSE Announcements", "https://archives.nseindia.com/content/RSS/Online_announcements.xml", "exchange"),
-    ("NSE Corporate Actions", "https://nsearchives.nseindia.com/content/RSS/Daily_Buyback.xml", "exchange"),
-    ("NSE Financial Results", "https://nsearchives.nseindia.com/content/RSS/Shareholding_Pattern.xml", "exchange"),
-    ("NSE Board Meetings", "https://nsearchives.nseindia.com/content/RSS/brsr.xml", "exchange"),
+    ("NSE Daily Buyback", "https://nsearchives.nseindia.com/content/RSS/Daily_Buyback.xml", "exchange"),
+    ("NSE Shareholding Pattern", "https://nsearchives.nseindia.com/content/RSS/Shareholding_Pattern.xml", "exchange"),
+    ("NSE BRSR Filings", "https://nsearchives.nseindia.com/content/RSS/brsr.xml", "exchange"),
     ("NSE Circulars", "https://nsearchives.nseindia.com/content/RSS/Circulars.xml", "exchange"),
-    ("BSE Notices", "https://www.bseindia.com/data/xml/announcements.xml", "exchange"),
+    ("BSE Corporate Announcements", "https://www.bseindia.com/data/xml/announcements.xml", "exchange"),
     ("SEBI", "https://www.sebi.gov.in/sebirss.xml", "regulator"),
     ("RBI Press Releases", "https://rbi.org.in/pressreleases_rss.xml", "regulator"),
     ("RBI Notifications", "https://rbi.org.in/notifications_rss.xml", "regulator"),
