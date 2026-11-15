@@ -101,6 +101,7 @@ def get_market_status(now=None):
         "timezone": "Asia/Kolkata",
         "calendar_verified": verified,
         "session_type": "regular",
+        "session_open": None,
         "regular_open": False,
         "phase": "closed",
         "reason": reason,
@@ -124,6 +125,7 @@ def get_market_status(now=None):
     if special:
         base["session_type"] = "special"
         base["session_name"] = special["name"]
+        base["session_open"] = special["open"].strftime("%H:%M")
         pre_open, market_open, market_close = special["pre_open"], special["open"], special["close"]
         if clock < pre_open:
             base["phase"] = "pre_market"
@@ -139,6 +141,7 @@ def get_market_status(now=None):
             base["phase"] = "post_market"
             base["reason"] = f"{special['name']} equity-cash session has closed for today."
     else:
+        base["session_open"] = REGULAR_OPEN.strftime("%H:%M")
         if clock < PRE_OPEN_START:
             base["phase"] = "pre_market"
             base["reason"] = "Before the NSE pre-open session (09:00 IST)."
