@@ -138,34 +138,15 @@ The score is a transparent heuristic ranking, not a calibrated probability of pr
 ## Hosting clarification
 Streamlit is optional and only hosts the visual dashboard. The Telegram workflow does not pass through Streamlit: Telegram -> Cloudflare Worker -> GitHub Actions -> Python scanner -> Telegram. GitHub Actions runs a temporary cloud runner only when a Telegram command dispatches a job.
 
-## Live market-open decision layer (model v3)
 
-The Telegram `/fetch 250` and `/fetch 500` commands first check the NSE cash-equity session in Asia/Kolkata time. The current static NSE holiday table is populated for 2026 and includes the published Sunday 8 November 2026 Diwali Muhurat equity-cash session (pre-open 14:05–14:20; normal trading 14:20–15:30 IST). Unknown calendar years fail closed until their official holiday schedule is added. This is a schedule-based check, not an exchange outage/status feed; new special sessions must be added when NSE publishes their timings.
+## Zero-cost market-open intraday mode (no Groww subscription required)
 
-When the regular session is open, the scanner requires Groww live-data credentials. It does not fall back to Yahoo daily prices and label them live. The scan then:
-1. Uses completed daily OHLCV only as the baseline; the current unfinished Yahoo daily candle is removed.
-2. Fetches live NSE LTP and current-session OHLC snapshots in batches of up to 50.
-3. Calculates live breadth versus the prior completed close and live Nifty change versus its prior completed close.
-4. Enriches the top daily candidates with a current quote and completed 5-minute candles.
-5. Confirms a watchlist candidate only when the last trade is no older than 3 minutes, at least six completed 5-minute candles are available, recent 5-minute volume is at least 5% above the preceding three-candle average, price is above session VWAP, the last three completed candles have positive momentum and the last is green, the opening gap is no greater than +3.5% and no lower than -2%, relative strength versus Nifty is not materially negative, and the live composite score is at least 68/100.
-6. Sends only live-confirmed candidates. If none pass, the bot reports no candidate rather than forcing five names.
+The default Telegram scan uses Yahoo Finance's public 5-minute chart data for NSE `.NS` and BSE `.BO` tickers. It does not call Groww live-data endpoints, broker order APIs, or any paid market-data API. The Groww API key/secret entries in GitHub Actions are not used by this zero-cost scanner and may be removed from repository secrets. Do not share them.
 
-The live score is a heuristic blend of the prior daily score (45%), VWAP position (20%), 3-bar 5-minute momentum (15%), relative strength versus Nifty (10%) and opening-gap quality (10%). It is not a probability of profit. Reference stops/targets use the daily ATR percentage; they are not guaranteed fills, and users must verify the order-book spread, current price and risk themselves.
+Important limitation: Yahoo Finance is an unofficial public data route. Its 5-minute candles may be delayed, stale, missing for some symbols, or temporarily unavailable. The displayed intraday price is the latest completed 5-minute candle close, not an exchange-certified real-time last-traded price. The scanner blocks candles older than 20 minutes, excludes the currently forming 5-minute candle, and returns no candidate when intraday data is unavailable. Never rely on this feed alone for order execution; check the live quote and bid/ask in your broker app immediately before deciding.
 
-### Required Groww credentials for live mode
+The first confirmation usually requires six completed 5-minute candles and an expanding-volume comparison; availability may therefore begin around 09:45 IST or later. Both NSE and BSE are attempted via `.NS` / `.BO` tickers, but Yahoo coverage differs by symbol and an unavailable BSE candle is skipped rather than treated as a negative signal.
 
-Groww's public API documentation describes live LTP/OHLC and historical candles. The live-data plan is paid; the currently published Monthly API price is ₹499 plus taxes. Groww's free trial does not include live market data or historical candle APIs. Do not subscribe unless you accept that charge and the terms. See [Groww API pricing](https://groww.in/trade-api) and [live-data documentation](https://groww.in/trade-api/docs/curl/live-data).
+Groww's Free Trial/API key is not the same as free live market data. Groww currently advertises free-trial access to Cloud and APIs other than Live Data and Backtesting; live quotes (LTP/OHLC) and historical candle access are included in its paid API subscription at ₹499/month plus taxes. The free API key can still be useful for other Groww APIs, but this stock scanner does not need it. See [Groww pricing](https://groww.in/trade-api), [free trial explanation](https://groww.in/blog/api-trading-on-groww), and [Live Data docs](https://groww.in/trade-api/docs/curl/live-data).
 
-In GitHub **Settings → Secrets and variables → Actions**, add either:
-- `GROWW_ACCESS_TOKEN` (a manually generated access token; expires daily at 06:00 IST), or
-- `GROWW_API_KEY` and `GROWW_API_SECRET` (the API-key/secret method requires daily approval on Groww Cloud API Keys page before the worker can generate a session token).
-
-No Groww token or secret belongs in source code, Telegram messages or the README.
-
-### Exchange scope
-
-The current live scanner sends Groww requests for NSE trading symbols. The cached BSE universe currently stores BSE scrip codes rather than verified Groww trading symbols. BSE candidates are therefore not treated as live-confirmed until a reliable scrip-code-to-trading-symbol mapping is implemented. The Telegram report must disclose the NSE/BSE coverage.
-
-### Timing and no-trade rules
-
-NSE regular cash trading is 09:15–15:30 IST. The bot reports weekend, holiday, pre-open and post-market status before doing a scan. It requires six completed 5-minute candles and an expanding-volume comparison, so the first normal-session confirmed candidates generally cannot appear before about 09:45 IST. At the open the bot will return WAIT / no trade until sufficient candles and a fresh trade timestamp exist. The exchange calendar is schedule-based and must be updated when NSE publishes a new annual holiday list.
+Groww's static-IP notice is relevant to API order placement. This repository's scanner does not send orders, so no static IP is needed for this read-only research workflow.
