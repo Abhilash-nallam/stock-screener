@@ -5,6 +5,11 @@
 const DEFAULT_REPOSITORY = "Abhilash-nallam/stock-screener";
 const DEFAULT_BRANCH = "new";
 const WORKFLOW_FILE = "telegram-commands.yml";
+const MAX_WEBHOOK_BYTES = 256 * 1024;
+const MIN_COMMAND_INTERVAL_MS = 8000;
+// Best-effort per-isolate throttling. GitHub workflow concurrency is the durable
+// second layer that prevents overlapping scan/refresh jobs.
+const LAST_COMMAND_AT = new Map();
 
 const MENU = {
   inline_keyboard: [
@@ -54,6 +59,31 @@ async function sendMessage(env, chatId, text, extra = {}) {
   });
 }
 
+function isAuthorisedPrivateUser(env, chat, from) {
+  const allowedId = String(env.TELEGRAM_CHAT_ID || "");
+  return Boolean(
+    allowedId &&
+    chat?.type === "private" &&
+    String(chat?.id || "") === allowedId &&
+    String(from?.id || "") === allowedId &&
+    from?.is_bot !== true
+  );
+}
+
+function checkCommandRateLimit(chatId) {
+  const now = Date.now();
+  const previous = LAST_COMMAND_AT.get(String(chatId)) || 0;
+  if (now - previous < MIN_COMMAND_INTERVAL_MS) {
+    throw new Error("Please wait a few seconds before sending another radar command.");
+  }
+  LAST_COMMAND_AT.set(String(chatId), now);
+  if (LAST_COMMAND_AT.size > 256) {
+    for (const [key, timestamp] of LAST_COMMAND_AT) {
+      if (now - timestamp > 60000) LAST_COMMAND_AT.delete(key);
+    }
+  }
+}
+
 async function showMenu(env, chatId, intro = true) {
   const text = intro
     ? "<b>🇮🇳 INDIA STOCK RADAR</b>\nChoose an action. Scans run on GitHub's cloud runner and the report returns here.\n\nCommands: /fetch 250, /fetch 500, /refresh_nse, /refresh_bse, /refresh_all, /status"
@@ -94,6 +124,7 @@ async function dispatchJob(env, chatId, command, stockLimit = "250") {
 }
 
 async function queueJob(env, chatId, command, stockLimit) {
+  checkCommandRateLimit(chatId);
   const labels = {
     scan: `${stockLimit}-stock scan`,
     refresh_nse: "NSE universe refresh",
@@ -152,7 +183,7 @@ async function runAction(env, chatId, action) {
 
 async function handleMessage(env, message) {
   const chatId = String(message?.chat?.id || "");
-  if (!chatId || chatId !== String(env.TELEGRAM_CHAT_ID || "")) return;
+  if (!isAuthorisedPrivateUser(env, message?.chat, message?.from)) return;
   const raw = String(message?.text || "").trim();
   if (!raw) return;
   const parts = raw.split(/\s+/);
@@ -188,7 +219,7 @@ async function handleMessage(env, message) {
 
 async function handleCallback(env, callback) {
   const chatId = String(callback?.message?.chat?.id || "");
-  if (!chatId || chatId !== String(env.TELEGRAM_CHAT_ID || "")) {
+  if (!isAuthorisedPrivateUser(env, callback?.message?.chat, callback?.from)) {
     await answerCallback(env, callback?.id, "Not authorised");
     return;
   }
@@ -197,10 +228,24 @@ async function handleCallback(env, callback) {
 }
 
 async function registerWebhook(request, env) {
-  if (!env.SETUP_KEY || request.headers.get("X-Setup-Key") !== env.SETUP_KEY) {
+  const setupKey = String(env.SETUP_KEY || "");
+  if (setupKey.length < 32 || request.headers.get("X-Setup-Key") !== setupKey) {
     return json({ ok: false, error: "Unauthorised" }, 401);
   }
-  const body = await request.json().catch(() => ({}));
+  const declaredLength = Number(request.headers.get("content-length") || 0);
+  if (declaredLength > MAX_WEBHOOK_BYTES) {
+    return json({ ok: false, error: "Request body too large." }, 413);
+  }
+  const rawBody = await request.text();
+  if (new TextEncoder().encode(rawBody).byteLength > MAX_WEBHOOK_BYTES) {
+    return json({ ok: false, error: "Request body too large." }, 413);
+  }
+  let body;
+  try {
+    body = JSON.parse(rawBody);
+  } catch {
+    return json({ ok: false, error: "Invalid JSON body." }, 400);
+  }
   let webhookUrl;
   try {
     webhookUrl = new URL(body.webhook_url);
@@ -211,8 +256,8 @@ async function registerWebhook(request, env) {
     return json({ ok: false, error: "Webhook URL must be HTTPS and end in /telegram/webhook." }, 400);
   }
   const secret = String(env.TELEGRAM_WEBHOOK_SECRET || "");
-  if (!/^[A-Za-z0-9_-]{1,256}$/.test(secret)) {
-    return json({ ok: false, error: "TELEGRAM_WEBHOOK_SECRET must use 1-256 letters, digits, underscores or hyphens." }, 400);
+  if (!/^[A-Za-z0-9_-]{32,256}$/.test(secret)) {
+    return json({ ok: false, error: "TELEGRAM_WEBHOOK_SECRET must use 32-256 letters, digits, underscores or hyphens." }, 400);
   }
   const result = await telegramApi(env, "setWebhook", {
     url: webhookUrl.toString(),
@@ -247,7 +292,8 @@ export default {
       try {
         return await registerWebhook(request, env);
       } catch (error) {
-        return json({ ok: false, error: error.message }, 502);
+        console.error("Webhook registration failed:", error.message);
+        return json({ ok: false, error: "Webhook registration failed. Check Cloudflare Worker logs." }, 502);
       }
     }
 
@@ -260,9 +306,20 @@ export default {
       return new Response("Forbidden", { status: 403 });
     }
 
+    const declaredLength = Number(request.headers.get("content-length") || 0);
+    if (declaredLength > MAX_WEBHOOK_BYTES) {
+      return new Response("Payload Too Large", { status: 413 });
+    }
     let update;
     try {
-      update = await request.json();
+      const rawBody = await request.text();
+      if (new TextEncoder().encode(rawBody).byteLength > MAX_WEBHOOK_BYTES) {
+        return new Response("Payload Too Large", { status: 413 });
+      }
+      update = JSON.parse(rawBody);
+      if (!update || typeof update !== "object" || Array.isArray(update)) {
+        return new Response("Bad Request", { status: 400 });
+      }
     } catch {
       return new Response("Bad Request", { status: 400 });
     }
