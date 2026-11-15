@@ -77,7 +77,7 @@ class TelegramFormattingTests(unittest.TestCase):
         }
         messages = format_scan_messages(result)
         self.assertEqual(len(messages), 5)
-        self.assertIn("LIVE SCAN", messages[0])
+        self.assertIn("FREE INTRADAY SCAN", messages[0])
         self.assertIn("GLOBAL EQUITY MARKETS", messages[1])
         self.assertIn("RELEVANT NEWS", messages[2])
         self.assertIn("PRICE ≤ ₹1,000", messages[3])
