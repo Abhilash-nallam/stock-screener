@@ -119,14 +119,24 @@ def _stock_card(row, rank):
     except (TypeError, ValueError):
         rsi_text = "n/a"
     entry = f"{_money(row.get('entry_low'))} – {_money(row.get('entry_high'))}"
+    news = row.get("news") or []
+    news_line = ""
+    if news:
+        top = news[0]
+        news_line = (
+            f"\\n📰 {html.escape(str(top.get('source', 'News')))}: "
+            f"{html.escape(str(top.get('title', ''))[:170])}"
+        )
+    news_flags = row.get("news_flags") or []
+    flag_line = f"\\n🚩 {html.escape('; '.join(news_flags)[:160])}" if news_flags else ""
     return (
-        f"<b>{rank}. {symbol} | {company}</b> · <b>{exchange}</b>\n"
-        f"💰 <b>{_money(row.get('price'))}</b>  ·  ⭐ Score <b>{score:.1f}/100</b>\n"
-        f"📊 1D {ret1}   ·   5D {ret5}   ·   20D {ret20}\n"
-        f"🎯 Entry reference: {entry}\n"
-        f"🛑 Stop reference: <b>{_money(row.get('stop_loss'))}</b>\n"
-        f"🏁 Targets: T1 <b>{_money(row.get('target1'))}</b>  ·  T2 <b>{_money(row.get('target2'))}</b>\n"
-        f"⚠️ Risk: {_risk(row.get('risk'))}  ·  RSI {rsi_text}  ·  Rel.Vol {rvol_text}\n"
+        f"<b>{rank}. {symbol} | {company}</b> · <b>{exchange}</b>\\n"
+        f"💰 <b>{_money(row.get('price'))}</b>  ·  ⭐ Score <b>{score:.1f}/100</b>\\n"
+        f"📊 1D {ret1}   ·   5D {ret5}   ·   20D {ret20}\\n"
+        f"🎯 Entry reference: {entry}\\n"
+        f"🛑 Stop reference: <b>{_money(row.get('stop_loss'))}</b>\\n"
+        f"🏁 Targets: T1 <b>{_money(row.get('target1'))}</b>  ·  T2 <b>{_money(row.get('target2'))}</b>\\n"
+        f"⚠️ Risk: {_risk(row.get('risk'))}  ·  RSI {rsi_text}  ·  Rel.Vol {rvol_text}{flag_line}{news_line}\\n"
         f"🧭 Setup: {html.escape(str(row.get('setup_status', 'n/a')))}"
     )
 
@@ -135,17 +145,46 @@ def format_scan_messages(result):
     market = result["market"]
     regime = str(market.get("regime", "unknown")).upper()
     regime_icon = "🟢" if regime == "BULLISH" else "🔴" if regime == "BEARISH" else "🟡"
+    global_risk = str(market.get("global_risk", "unknown")).upper()
+    global_icon = "🟢" if global_risk == "RISK_ON" else "🔴" if global_risk == "RISK_OFF" else "🟡"
     date = html.escape(str(result.get("data_date") or "unavailable"))
     header = (
-        "<b>🇮🇳 INDIA STOCK RADAR</b>\n"
-        f"🗓 Data date: <b>{date}</b>\n"
-        f"🌐 Nifty: {regime_icon} <b>{html.escape(regime)}</b>  ·  "
-        f"1D {_pct(market.get('nifty_change_1d'))}  ·  5D {_pct(market.get('nifty_change_5d'))}\n"
-        f"🔎 Scan: {result['success_count']}/{result['selected_count']} histories usable "
-        f"· {result['candidate_count']} passed candidate filters\n"
+        "<b>🇮🇳 INDIA STOCK RADAR</b>\\n"
+        f"🗓 Data date: <b>{date}</b>\\n"
+        f"🇮🇳 Nifty: {regime_icon} <b>{html.escape(regime)}</b> · "
+        f"1D {_pct(market.get('nifty_change_1d'))} · 5D {_pct(market.get('nifty_change_5d'))}\\n"
+        f"🌍 Global risk: {global_icon} <b>{html.escape(global_risk)}</b> · "
+        f"{market.get('global_positive_count', 0)}/{market.get('global_count', 0)} global indices positive (5D)\\n"
+        f"🔎 Scan: {result['success_count']}/{result['selected_count']} usable histories "
+        f"({result.get('nse_selected', 0)} NSE + {result.get('bse_selected', 0)} BSE selected) · "
+        f"{result['candidate_count']} candidates passed filters\\n"
+        f"📰 News: {result.get('news_count', 0)} items · "
+        f"{result.get('news_sources_working', 0)}/{result.get('news_sources_total', 0)} sources responding\\n"
         "<i>Daily-close research only. Levels are references, not live prices or orders.</i>"
     )
     messages = [header]
+
+    benchmarks = market.get("benchmarks", {})
+    benchmark_lines = ["<b>🌍 GLOBAL & INDIA MACRO SNAPSHOT</b>"]
+    for name in ("SENSEX", "SP500", "NASDAQ", "DOW", "FTSE", "NIKKEI", "HANG_SENG", "INDIA_VIX", "USDINR", "BRENT", "GOLD"):
+        item = benchmarks.get(name)
+        if item:
+            label = name.replace("_", " ")
+            benchmark_lines.append(
+                f"• {html.escape(label)}: 1D {_pct(item.get('daily_pct'))} · 5D {_pct(item.get('weekly_pct'))} · 20D {_pct(item.get('monthly_pct'))}"
+            )
+    for title, key in (("Global headlines", "global_news"), ("Official India filings / policy", "official_news")):
+        items = result.get(key, [])[:6]
+        benchmark_lines.append(f"\\n<b>{title}</b>")
+        if not items:
+            benchmark_lines.append("<i>No recent items returned by the configured feeds.</i>")
+        for item in items:
+            link = html.escape(str(item.get("link", "")), quote=True)
+            headline = html.escape(str(item.get("title", ""))[:190])
+            source = html.escape(str(item.get("publisher") or item.get("source") or ""))
+            benchmark_lines.append(f"• <a href=\"{link}\">{headline}</a> · {source}")
+    messages.append("\\n".join(benchmark_lines))
+
     for title, key in [("🟢 TOP CANDIDATES · PRICE ≤ ₹1,000", "low"),
                        ("🔵 TOP CANDIDATES · PRICE > ₹1,000", "high")]:
         rows = result[key]
@@ -155,13 +194,12 @@ def format_scan_messages(result):
         else:
             for rank, (_, row) in enumerate(rows.iterrows(), 1):
                 parts.append(_stock_card(row, rank))
-        messages.append("\n\n".join(parts))
+        messages.append("\\n\\n".join(parts))
     messages.append(
-        "<i>🟢/🔴 mark positive/negative percentage moves. Telegram does not support "
-        "arbitrary coloured text; the icons provide the colour cue. Verify company filings and quotes.</i>"
+        "<i>🟢/🔴 mark positive/negative percentage moves. Headline signals are keyword-based evidence, "
+        "not an interpretation of the full article. Verify filings and fresh quotes independently.</i>"
     )
     return messages
-
 
 def show_menu(chat_id, greeting=True):
     text = (
