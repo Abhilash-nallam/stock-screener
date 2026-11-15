@@ -150,7 +150,7 @@ def _stock_card(row, rank):
     if reason:
         lines.append(f"🔎 <b>Confirmation:</b> {html.escape(reason[:240])}")
     if flags:
-        lines.append(f"🚩 <b>Daily risk flags:</b> {html.escape('; '.join(str(x) for x in flags)[:180]}")
+        lines.append(f"🚩 <b>Daily risk flags:</b> {html.escape('; '.join(str(x) for x in flags)[:180])}")
     if news:
         top = news[0]
         source = html.escape(str(top.get("publisher") or top.get("source") or "News"))
