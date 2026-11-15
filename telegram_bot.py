@@ -217,7 +217,7 @@ def format_scan_messages(result):
         f"📰 <b>Broad news feeds:</b> {result.get('news_count', 0)} headlines · "
         f"{result.get('news_sources_working', 0)}/{result.get('news_sources_total', 0)} sources responding",
         "<i>Company searches are separately run for the leading 35 technical candidates.</i>",
-        "<i>Daily-close research only. These levels are reference zones, not live prices or orders.</i>",
+        "<i>Daily-close research only: levels are reference zones, not live orders. A higher model rank is not a profit probability or guarantee.</i>",
     ]
     messages = ["\n".join(header_lines)]
 
@@ -269,10 +269,6 @@ def format_scan_messages(result):
 
     messages.extend(_bucket_messages("🟢 TOP CANDIDATES — PRICE ≤ ₹1,000", result["low"]))
     messages.extend(_bucket_messages("🔵 TOP CANDIDATES — PRICE > ₹1,000", result["high"]))
-    messages.append(
-        "<i>🟢/🔴 show positive/negative moves. Headline sentiment is keyword-based and is not a full-article interpretation. "
-        "A higher model rank does not guarantee a price rise; confirm the latest quote, liquidity and risk before acting.</i>"
-    )
     return messages
 
 
