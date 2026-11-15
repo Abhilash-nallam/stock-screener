@@ -1,0 +1,68 @@
+name: Telegram stock radar commands
+
+on:
+  workflow_dispatch:
+    inputs:
+      command:
+        description: Telegram action
+        required: true
+        type: choice
+        options:
+          - scan
+          - refresh_nse
+          - refresh_bse
+          - refresh_all
+          - status
+      stock_limit:
+        description: Number of stocks for scan
+        required: true
+        type: choice
+        options:
+          - "250"
+          - "500"
+        default: "250"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: india-stock-radar-telegram-scan
+  cancel-in-progress: false
+
+jobs:
+  execute-telegram-command:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+      TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+      RADAR_COMMAND: ${{ inputs.command }}
+      RADAR_STOCK_LIMIT: ${{ inputs.stock_limit }}
+      PYTHONUNBUFFERED: "1"
+
+    steps:
+      - name: Check out scanner source
+        uses: actions/checkout@v4
+        with:
+          ref: new
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: requirements-bot.txt
+
+      - name: Restore exchange-universe cache
+        uses: actions/cache@v4
+        with:
+          path: data/
+          key: radar-universe-${{ runner.os }}-${{ github.run_id }}
+          restore-keys: |
+            radar-universe-${{ runner.os }}-
+
+      - name: Install lightweight scanner dependencies
+        run: python -m pip install --upgrade pip && pip install -r requirements-bot.txt
+
+      - name: Execute Telegram request
+        run: python telegram_action.py
