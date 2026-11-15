@@ -301,6 +301,14 @@ def run_scan(limit=250, min_score=60, news_limit=6, workers=6):
     expected_intraday = len(detailed)
     successful_intraday = sum(value is not None for value in intraday_results.values())
     coverage = 100.0 * successful_intraday / expected_intraday if expected_intraday else 0.0
+    shortlist_changes = [
+        float(item.get("live_change_pct"))
+        for item in live_rows
+        if item.get("live_change_pct") is not None
+    ]
+    breadth_advances = sum(value > 0.05 for value in shortlist_changes)
+    breadth_declines = sum(value < -0.05 for value in shortlist_changes)
+    breadth_unchanged = len(shortlist_changes) - breadth_advances - breadth_declines
 
     return {
         "market_session": market_session,
@@ -315,10 +323,11 @@ def run_scan(limit=250, min_score=60, news_limit=6, workers=6):
         "live_nifty_price": round(nifty_candle_price, 2),
         "live_nifty_change_pct": round(nifty_change, 2),
         "live_breadth": {
-            "advances": None,
-            "declines": None,
-            "unchanged": None,
-            "stocks_with_live_quotes": 0,
+            "advances": breadth_advances,
+            "declines": breadth_declines,
+            "unchanged": breadth_unchanged,
+            "stocks_with_live_quotes": len(shortlist_changes),
+            "scope": "researched shortlist only",
         },
         "live_researched_count": len(live_frame),
         "live_confirmed_count": len(confirmed_picks),
