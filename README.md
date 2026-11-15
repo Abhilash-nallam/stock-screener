@@ -150,3 +150,8 @@ The first confirmation usually requires six completed 5-minute candles and an ex
 Groww's Free Trial/API key is not the same as free live market data. Groww currently advertises free-trial access to Cloud and APIs other than Live Data and Backtesting; live quotes (LTP/OHLC) and historical candle access are included in its paid API subscription at ₹499/month plus taxes. The free API key can still be useful for other Groww APIs, but this stock scanner does not need it. See [Groww pricing](https://groww.in/trade-api), [free trial explanation](https://groww.in/blog/api-trading-on-groww), and [Live Data docs](https://groww.in/trade-api/docs/curl/live-data).
 
 Groww's static-IP notice is relevant to API order placement. This repository's scanner does not send orders, so no static IP is needed for this read-only research workflow.
+### NSE/BSE universe cache behavior
+
+Before scanning, the worker checks the NSE and BSE caches separately. If NSE exists but BSE is missing, it now attempts the BSE refresh independently instead of silently reporting a 0-BSE scan. If the BSE public endpoint fails, the report shows the reason and `/refresh_bse` can be used to retry. The 250/500 mixed universe uses a rotating sample (normally up to 80% NSE and 20% BSE-exclusive instruments); companies listed on both exchanges are deduplicated by ISIN, preferring NSE.
+
+After refresh, Yahoo intraday coverage is still per-symbol and may be incomplete. A BSE scrip with no `.BO` 5-minute history is skipped; it is not counted as an actionable live quote.
