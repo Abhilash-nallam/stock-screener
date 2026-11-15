@@ -30,6 +30,13 @@ OFFICIAL_FEEDS = [
     ("RBI Press Releases", "https://rbi.org.in/pressreleases_rss.xml", "regulator"),
     ("RBI Notifications", "https://rbi.org.in/notifications_rss.xml", "regulator"),
     ("PIB Government Releases", "https://pib.gov.in/RssMain.aspx?ModId=6&Lang=1&Regid=1", "government"),
+    ("BBC World", "https://feeds.bbci.co.uk/news/world/rss.xml", "global"),
+    ("BBC Business", "https://feeds.bbci.co.uk/news/business/rss.xml", "global"),
+    ("BBC Asia", "https://feeds.bbci.co.uk/news/world/asia/rss.xml", "global"),
+    ("CNBC World", "https://www.cnbc.com/id/100727362/device/rss/rss.html", "global"),
+    ("CNBC Asia", "https://www.cnbc.com/id/19832390/device/rss/rss.html", "global"),
+    ("CNBC Economy", "https://www.cnbc.com/id/20910258/device/rss/rss.html", "global"),
+    ("The Guardian Business", "https://www.theguardian.com/us/business/rss", "global"),
 ]
 
 POSITIVE = [
@@ -183,19 +190,32 @@ def _fetch_gdelt():
     )
     url = "https://api.gdeltproject.org/api/v2/doc/doc"
     try:
-        response = requests.get(
-            url,
-            params={
-                "query": query,
-                "mode": "ArtList",
-                "format": "json",
-                "maxrecords": 60,
-                "timespan": "24h",
-                "sort": "HybridRel",
-            },
-            headers={"User-Agent": USER_AGENT},
-            timeout=22,
-        )
+        params = {
+            "query": query,
+            "mode": "ArtList",
+            "format": "json",
+            "maxrecords": 60,
+            "timespan": "24h",
+            "sort": "HybridRel",
+        }
+        response = None
+        for attempt in range(2):
+            response = requests.get(
+                url,
+                params=params,
+                headers={"User-Agent": USER_AGENT},
+                timeout=22,
+            )
+            if response.status_code in (429, 503) and attempt == 0:
+                retry_after = response.headers.get("Retry-After", "")
+                try:
+                    delay = min(8, max(4, int(retry_after)))
+                except (TypeError, ValueError):
+                    delay = 6
+                time.sleep(delay)
+                continue
+            response.raise_for_status()
+            break
         response.raise_for_status()
         body = response.json()
         articles = body.get("articles", []) if isinstance(body, dict) else []
@@ -207,7 +227,7 @@ def _fetch_gdelt():
                 article.get("seendate", ""),
                 "GDELT Global News",
                 "global",
-                article.get("socialimage", ""),
+                "",
                 article.get("domain") or article.get("sourceCountry") or "GDELT",
             )
             if item:
