@@ -1,5 +1,5 @@
 import unittest
-from datetime import datetime
+from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 
 from radar.live_signals import build_live_signal
@@ -16,9 +16,11 @@ def make_candles():
         (101.3, 101.8, 101.2, 101.6, 200),
         (101.6, 102.0, 101.5, 101.9, 250),
     ]
+    start = datetime(2026, 11, 16, 9, 15, tzinfo=IST)
     return [
-        {"open": o, "high": h, "low": l, "close": c, "volume": v}
-        for o, h, l, c, v in rows
+        {"time": start + timedelta(minutes=5 * i),
+         "open": o, "high": h, "low": l, "close": c, "volume": v}
+        for i, (o, h, l, c, v) in enumerate(rows)
     ]
 
 
@@ -60,6 +62,29 @@ class LiveSignalTests(unittest.TestCase):
         result = build_live_signal(self.daily, snapshot, self.detail, nifty_change_pct=0, now=self.now)
         self.assertFalse(result["live_eligible"])
         self.assertIn("gap", result["live_reason"].lower())
+
+    def test_non_consecutive_5m_bars_block_recommendation(self):
+        broken = dict(self.detail)
+        broken["candles"] = list(make_candles())
+        broken["candles"][-1] = dict(broken["candles"][-1])
+        broken["candles"][-1]["time"] += timedelta(minutes=10)
+        result = build_live_signal(self.daily, self.snapshot, broken, nifty_change_pct=0, now=self.now)
+        self.assertFalse(result["live_eligible"])
+        self.assertIn("not consecutive", result["live_reason"])
+
+    def test_high_daily_risk_is_not_confirmed(self):
+        daily = dict(self.daily, risk="High")
+        result = build_live_signal(daily, self.snapshot, self.detail, nifty_change_pct=0, now=self.now)
+        self.assertFalse(result["live_eligible"])
+        self.assertIn("Daily model risk is High", result["live_reason"])
+
+    def test_nifty_candle_time_alignment_blocks_stale_comparison(self):
+        result = build_live_signal(
+            self.daily, self.snapshot, self.detail, nifty_change_pct=0, now=self.now,
+            nifty_candle_end_time=self.now + timedelta(minutes=20),
+        )
+        self.assertFalse(result["live_eligible"])
+        self.assertIn("too far apart in time", result["live_reason"])
 
     def test_too_few_completed_candles_waits(self):
         detail = {"quote": self.detail["quote"], "candles": make_candles()[:2]}
