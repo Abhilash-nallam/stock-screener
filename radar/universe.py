@@ -208,8 +208,22 @@ def select_scan_universe(universe, limit):
     bse = data[data["exchange"].astype(str).str.upper().eq("BSE")]
     nse_count = min(len(nse), int(limit * 0.8))
     bse_count = min(len(bse), limit - nse_count)
-    selected = pd.concat([nse.head(nse_count), bse.head(bse_count)], ignore_index=True)
+    # Stable within a calendar day; advances across the full sorted exchange list
+    # on each new India calendar day, instead of scanning only the first symbols.
+    from datetime import date
+    day_index = date.today().toordinal()
+
+    def rotating_slice(frame, count, offset):
+        if frame.empty or count <= 0:
+            return frame.head(0)
+        start = offset % len(frame)
+        positions = [(start + i) % len(frame) for i in range(min(count, len(frame)))]
+        return frame.iloc[positions]
+
+    selected_nse = rotating_slice(nse, nse_count, day_index * nse_count)
+    selected_bse = rotating_slice(bse, bse_count, day_index * bse_count)
+    selected = pd.concat([selected_nse, selected_bse], ignore_index=True)
     if len(selected) < limit:
         remaining = data[~data["yahoo_symbol"].isin(selected["yahoo_symbol"])]
-        selected = pd.concat([selected, remaining.head(limit - len(selected))], ignore_index=True)
+        selected = pd.concat([selected, rotating_slice(remaining, limit - len(selected), day_index * max(1, limit - len(selected)))], ignore_index=True)
     return selected.drop_duplicates("yahoo_symbol").reset_index(drop=True)
