@@ -56,10 +56,7 @@ jobs:
       - name: Restore exchange-universe cache
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
-          path: |
-            data/nse_equity_universe.csv
-            data/bse_equity_universe.csv
-            data/universe_refresh.json
+          path: data/
           key: radar-universe-${{ runner.os }}-${{ github.run_id }}
           restore-keys: |
             radar-universe-${{ runner.os }}-
