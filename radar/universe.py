@@ -196,7 +196,7 @@ def load_cached_combined_universe():
     return combine_universe(load_cached_nse_universe(), load_cached_bse_universe())
 
 
-def select_scan_universe(universe, limit):
+def select_scan_universe(universe, limit, as_of=None):
     """Select up to 80% NSE and 20% BSE-exclusive symbols, then fill remaining slots."""
     limit = int(limit)
     if limit not in (250, 500):
@@ -211,7 +211,7 @@ def select_scan_universe(universe, limit):
     # Stable within a calendar day; advances across the full sorted exchange list
     # on each new India calendar day, instead of scanning only the first symbols.
     from datetime import date
-    day_index = date.today().toordinal()
+    day_index = (as_of or date.today()).toordinal()
 
     def rotating_slice(frame, count, offset):
         if frame.empty or count <= 0:
