@@ -38,7 +38,22 @@ def run_backtest_for_symbol(symbol, df, nifty_df, fund):
 
     for i in range(MIN_LOOKBACK, len(df) - max(FORWARD_WINDOWS), SAMPLE_EVERY):
         history_slice = df.iloc[: i + 1]
-        nifty_slice = nifty_df.iloc[: i + 1] if nifty_df is not None and not nifty_df.empty else None
+        # Align the benchmark by calendar date, not row number. Individual
+        # equities can have shorter histories/listing dates than the index;
+        # positional slicing can accidentally include future Nifty observations.
+        if nifty_df is not None and not nifty_df.empty:
+            cutoff = pd.Timestamp(df.index[i])
+            nifty_index = pd.DatetimeIndex(pd.to_datetime(nifty_df.index))
+            if nifty_index.tz is not None and cutoff.tzinfo is None:
+                nifty_index = nifty_index.tz_convert("Asia/Kolkata").tz_localize(None)
+            elif nifty_index.tz is None and cutoff.tzinfo is not None:
+                cutoff = cutoff.tz_convert("Asia/Kolkata").tz_localize(None)
+            elif nifty_index.tz is not None and cutoff.tzinfo is not None:
+                cutoff = cutoff.tz_convert("Asia/Kolkata")
+                nifty_index = nifty_index.tz_convert("Asia/Kolkata")
+            nifty_slice = nifty_df.loc[nifty_index <= cutoff]
+        else:
+            nifty_slice = None
         tech = ta.analyze(history_slice, nifty_slice)
         if tech is None:
             continue
