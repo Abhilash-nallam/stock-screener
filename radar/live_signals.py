@@ -93,12 +93,12 @@ def build_live_signal(daily_row, snapshot, detail, nifty_change_pct=None, now=No
     reasons = []
     if not quote_fresh:
         reasons.append("Last trade is missing or older than 3 minutes")
-    if len(candles) < 3:
-        reasons.append(f"Only {len(candles)} completed 5-minute candles; need at least 3")
+    if len(candles) < 6:
+        reasons.append(f"Only {len(candles)} completed 5-minute candles; need at least 6 for volume confirmation")
     if day_open is None or day_open <= 0:
         reasons.append("Live session opening price is unavailable")
 
-    if len(candles) < 3 or day_open is None or day_open <= 0:
+    if len(candles) < 6 or day_open is None or day_open <= 0:
         result["live_reason"] = "; ".join(reasons) or "Intraday inputs unavailable"
         result["live_status"] = "WAIT — insufficient intraday data"
         return result
@@ -184,16 +184,17 @@ def build_live_signal(daily_row, snapshot, detail, nifty_change_pct=None, now=No
     if nifty_change_pct is not None and _number(nifty_change_pct) is not None:
         if float(nifty_change_pct) < -0.75 and (relative_to_nifty is None or relative_to_nifty < 0.5):
             reasons.append("Broad Nifty sell-off; stock has not shown enough relative strength")
-    if volume_confirmation is False:
-        reasons.append("Recent 5-minute volume is not expanding")
+    if volume_confirmation is not True:
+        reasons.append("Recent 5-minute volume is not confirmed as expanding")
     if live_score < 68:
         reasons.append("Live composite score is below the confirmation threshold")
 
-    # At least 3 completed candles, fresh trade timestamp, price above VWAP,
-    # positive short-term momentum and a non-extreme opening gap are mandatory.
+    # At least 6 completed candles, expanding volume, a fresh trade timestamp,
+    # price above VWAP, positive short-term momentum and a non-extreme opening gap are mandatory.
     hard_gates = (
         quote_fresh
-        and len(candles) >= 3
+        and len(candles) >= 6
+        and volume_confirmation is True
         and vwap_distance is not None and vwap_distance > 0
         and momentum_3 is not None and momentum_3 > 0
         and last_candle_green
