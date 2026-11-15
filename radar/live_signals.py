@@ -8,6 +8,8 @@ import math
 from zoneinfo import ZoneInfo
 
 IST = ZoneInfo("Asia/Kolkata")
+CANDLE_INTERVAL_SECONDS = 300
+MAX_NIFTY_ALIGNMENT_SECONDS = 600
 
 
 def _number(value, default=None):
@@ -34,7 +36,10 @@ def _trade_time_epoch(value):
         return None
 
 
-def build_live_signal(daily_row, snapshot, detail, nifty_change_pct=None, now=None):
+def build_live_signal(
+    daily_row, snapshot, detail, nifty_change_pct=None, now=None,
+    nifty_candle_end_time=None,
+):
     """Return a live-confirmation result for one daily-ranked candidate."""
     current = now or datetime.now(IST)
     current = current.astimezone(IST) if current.tzinfo else current.replace(tzinfo=IST)
@@ -56,8 +61,24 @@ def build_live_signal(daily_row, snapshot, detail, nifty_change_pct=None, now=No
     quote_age = (current.astimezone(timezone.utc) - last_trade_dt).total_seconds() if last_trade_dt else None
     # Yahoo public intraday candles may be delayed. Do not call them real-time;
     # allow up to 20 minutes but label the exact candle time and provider.
-    max_age = 1200 if "Yahoo" in source_label else 180
+    max_age = _number((detail or {}).get("max_age_seconds"), 600 if "Yahoo" in source_label else 180)
     quote_fresh = quote_age is not None and -5 <= quote_age <= max_age
+
+    candle_times = [item.get("time") for item in candles[-6:]]
+    candles_contiguous = len(candle_times) == 6 and all(
+        candle_times[i] is not None
+        and candle_times[i + 1] is not None
+        and (candle_times[i + 1] - candle_times[i]).total_seconds() == CANDLE_INTERVAL_SECONDS
+        for i in range(5)
+    )
+    candidate_candle_end = (
+        candles[-1]["time"] + __import__("datetime").timedelta(seconds=CANDLE_INTERVAL_SECONDS)
+        if candles and candles[-1].get("time") is not None else None
+    )
+    nifty_alignment_ok = True
+    if nifty_candle_end_time is not None and candidate_candle_end is not None:
+        delta_seconds = abs((candidate_candle_end - nifty_candle_end_time).total_seconds())
+        nifty_alignment_ok = delta_seconds <= MAX_NIFTY_ALIGNMENT_SECONDS
 
     day_change = (live_price / previous_close - 1.0) * 100.0
     gap_pct = (day_open / previous_close - 1.0) * 100.0 if day_open else None
@@ -99,10 +120,14 @@ def build_live_signal(daily_row, snapshot, detail, nifty_change_pct=None, now=No
         reasons.append(f"Intraday timestamp is missing or older than {int(max_age / 60)} minutes")
     if len(candles) < 6:
         reasons.append(f"Only {len(candles)} completed 5-minute candles; need at least 6 for volume confirmation")
+    elif not candles_contiguous:
+        reasons.append("Last six 5-minute candles are not consecutive; intraday continuity is unverified")
+    if not nifty_alignment_ok:
+        reasons.append("Stock and Nifty 5-minute candles are too far apart in time")
     if day_open is None or day_open <= 0:
         reasons.append("Live session opening price is unavailable")
 
-    if len(candles) < 6 or day_open is None or day_open <= 0:
+    if len(candles) < 6 or not candles_contiguous or not nifty_alignment_ok or day_open is None or day_open <= 0:
         result["live_reason"] = "; ".join(reasons) or "Intraday inputs unavailable"
         result["live_status"] = "WAIT — insufficient intraday data"
         return result
@@ -153,7 +178,9 @@ def build_live_signal(daily_row, snapshot, detail, nifty_change_pct=None, now=No
         gap_score = 20.0
     else:
         gap_score = 15.0
-    volume_score = 50.0 if volume_confirmation is None else (85.0 if volume_confirmation else 35.0)
+    daily_risk = str(daily_row.get("risk", "")).strip().lower()
+    if daily_risk == "high":
+        reasons.append("Daily model risk is High; excluded from live-confirmed picks")
 
     live_score = (
         0.45 * _clip(score_daily)
@@ -204,7 +231,8 @@ def build_live_signal(daily_row, snapshot, detail, nifty_change_pct=None, now=No
         and last_candle_green
         and (gap_pct is None or -2.0 <= gap_pct <= 3.5)
         and (relative_to_nifty is None or relative_to_nifty >= -0.15)
-        and volume_confirmation is not False
+        and daily_risk != "high"
+        and nifty_alignment_ok
         and live_score >= 68
         and not (
             nifty_change_pct is not None
