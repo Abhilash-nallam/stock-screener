@@ -1,5 +1,6 @@
 """CSV journal for prospective daily pick performance."""
 from pathlib import Path
+import math
 import pandas as pd
 
 LEDGER_PATH=Path("data/recommendation_ledger.csv")
@@ -31,8 +32,17 @@ def _refresh(ledger,histories):
         if dates.tz is not None: dates=dates.tz_convert("Asia/Kolkata").tz_localize(None)
         forecast=pd.Timestamp(row["asof_date"]).normalize()
         pos=dates.normalize().searchsorted(forecast,side="left")
-        entry=float(row.get("price",0) or 0)
-        if pos>=len(dates) or entry<=0: continue
+        # Forward-test the recorded scan-time candle close when present.
+        # Legacy ledger rows have no live_price and fall back to the daily close.
+        raw_entry = row.get("live_price")
+        if raw_entry is None or pd.isna(raw_entry):
+            raw_entry = row.get("price", 0)
+        try:
+            entry = float(raw_entry)
+        except (TypeError, ValueError):
+            continue
+        if pos >= len(dates) or not math.isfinite(entry) or entry <= 0:
+            continue
         closes=pd.to_numeric(h.Close,errors="coerce").to_numpy()
         for horizon,ret_col,date_col in [(5,"return_5d_pct","actual_5d_date"),(20,"return_20d_pct","actual_20d_date")]:
             target=pos+horizon
