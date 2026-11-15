@@ -1,21 +1,92 @@
 # India Stock Radar
 
-A Streamlit dashboard plus a separate long-polling Telegram command worker.
+A Streamlit dashboard and a serverless Telegram-controlled stock scanner.
 
-## Main capabilities
-- Combined NSE + BSE listed-equity universe with separate refreshes and cached source files.
-- Telegram commands and inline buttons for 250-stock or 500-stock scans.
-- Telegram commands to refresh NSE, BSE, or both universes and to inspect cache counts.
-- Detailed stock cards with price, score, 1D/5D/20D performance, entry reference, stop, targets, risk, RSI, relative volume and data date.
-- Positive/negative moves use green/red emoji indicators. Telegram does not support arbitrary text colours.
-- Streamlit dashboard with exchange refresh controls, scan selector, stock tables, planning levels and forward-test ledger.
-- Optional Dhan/Groww read-only portfolio panels.
+## Hosting architecture — free tiers
+- **Streamlit Community Cloud:** hosts the dashboard.
+- **Cloudflare Workers Free:** receives Telegram webhook commands (100,000 requests/day plan allowance).
+- **GitHub Actions:** runs the Python scanner only when requested. Standard GitHub-hosted runners are free for public repositories.
+- No always-on Python worker, Render Background Worker, VPS or home PC is needed.
 
-## Important market-data limitations
-Daily OHLCV uses Yahoo Finance via yfinance, an unofficial source that can be delayed, incomplete, rate-limited or unavailable. It is not a live execution feed. NSE security list uses the public NSE equity CSV. BSE list uses BSE's public active-equity scrip endpoint and maps scrip codes to Yahoo `.BO` tickers; public endpoints may change or throttle. Confirm ticker mapping and source data before using a name.
-The model is a research ranking heuristic, not a calibrated probability or a promise of returns. It does not include complete official delivery statistics, FII/DII series, audited fundamentals or an exchange filing classifier.
+The GitHub repository must remain public to use the unlimited standard hosted-runner allowance described by GitHub. Cloudflare Workers Free has service limits; this is not an unlimited compute plan.
 
-## Run locally (Windows)
+## Telegram features
+- `/start` or `/help`: show the inline action menu.
+- `/fetch 250` or `/fetch 500`: run the scan and send the report back in Telegram.
+- `/refresh_nse`, `/refresh_bse`, `/refresh_all`: refresh exchange universes.
+- `/status`: report cached NSE/BSE universe counts.
+- Inline buttons provide the same actions.
+- Reports contain market regime, scan coverage, top-five candidates in each price band, company/exchange, last close, score, 1D/5D/20D changes, entry reference, stop, two targets, risk, RSI and relative volume.
+- Positive/negative moves use green/red icons. Telegram does not support arbitrary HTML text colours.
+
+## Market-data limitations
+Daily OHLCV comes from Yahoo Finance via yfinance, an unofficial source that may be delayed, incomplete or throttled. It is not a live execution feed.
+The NSE list is downloaded from the public NSE equity CSV. The BSE list is sourced from a public BSE active-scrip endpoint; that endpoint may change or rate-limit. The scanner combines the two lists and uses ISIN de-duplication where matching ISINs exist.
+Model scores are heuristic rankings, not calibrated profit probabilities or guarantees. Full official delivery-volume, FII/DII, audited fundamentals and a corporate-filings classifier are not currently integrated.
+Displayed prices/entry/stop/targets are based on daily closes and are not live order instructions.
+
+## Deploy the dashboard
+Deploy on Streamlit Community Cloud:
+- Repository: `Abhilash-nallam/stock-screener`
+- Branch: `new`
+- Main file: `app.py`
+
+Add root-level Streamlit Secrets for its manual Telegram test/summary buttons:
+```toml
+TELEGRAM_BOT_TOKEN = "your_bot_token"
+TELEGRAM_CHAT_ID = "your_private_chat_id"
+```
+
+## Configure GitHub Actions secrets
+In GitHub repository **Settings → Secrets and variables → Actions → New repository secret**, create:
+- `TELEGRAM_BOT_TOKEN`: the BotFather token.
+- `TELEGRAM_CHAT_ID`: your authorised personal chat ID.
+
+The repository is public, but Actions secrets are not exposed in repository source. Never put tokens in code, issues, logs or commits.
+
+## Deploy the Cloudflare Telegram webhook
+1. Sign in to Cloudflare and open **Workers & Pages**.
+2. Create a Worker named e.g. `india-stock-radar-bot`.
+3. Open **Edit code** and paste the complete contents of `cloudflare/telegram-worker.js`.
+4. Under **Settings → Variables and Secrets**, add these as secrets:
+   - `TELEGRAM_BOT_TOKEN`
+   - `TELEGRAM_CHAT_ID`
+   - `TELEGRAM_WEBHOOK_SECRET` (random 32+ character string using letters, digits, underscore or hyphen)
+   - `GITHUB_ACTIONS_TOKEN` (fine-grained GitHub PAT)
+   - `SETUP_KEY` (another long random secret used only for webhook registration)
+5. Deploy the Worker. Its public URL will look like `https://india-stock-radar-bot.<account>.workers.dev`.
+
+### Create the GitHub token for the webhook
+Create a fine-grained personal access token in GitHub:
+- Resource owner: your account.
+- Repository access: only `stock-screener`.
+- Repository permissions: **Actions — Read and write**.
+- Metadata read is automatically included.
+Store this value only as Cloudflare Worker secret `GITHUB_ACTIONS_TOKEN`. Do not add it to repository source.
+
+### Register the Telegram webhook once
+On Windows PowerShell, replace the two placeholders and run:
+```powershell
+$worker = "https://YOUR-WORKER.YOUR-ACCOUNT.workers.dev"
+$setupKey = "YOUR_SETUP_KEY"
+$body = @{ webhook_url = "$worker/telegram/webhook" } | ConvertTo-Json
+Invoke-RestMethod -Method Post -Uri "$worker/admin/register" -Headers @{ "X-Setup-Key" = $setupKey } -ContentType "application/json" -Body $body
+```
+A successful response shows `webhook_registered: true`. The Worker sets the Telegram webhook and bot command menu. Once webhook mode is enabled, Telegram `getUpdates` polling is not used.
+
+Test the Worker health URL: `https://YOUR-WORKER.YOUR-ACCOUNT.workers.dev/health`.
+
+## How a Telegram scan runs
+1. Telegram posts an update to Cloudflare Worker.
+2. Cloudflare validates the Telegram webhook secret and authorised chat ID.
+3. Cloudflare calls GitHub's workflow-dispatch API.
+4. GitHub Actions installs the lightweight scanner dependencies, restores the exchange-list cache, and runs `telegram_action.py`.
+5. The Python job posts the formatted scan or refresh report to Telegram.
+6. The exchange cache is saved for a future run.
+
+The GitHub runner is temporary; there is no process to keep alive. The Actions cache is temporary and subject to GitHub's cache retention/eviction policy.
+
+## Run locally (optional)
 ```bat
 py -m venv .venv
 .venv\Scripts\activate
@@ -24,48 +95,13 @@ copy .env.example .env
 streamlit run app.py
 ```
 
-## Telegram bot — separate always-on worker
-The Streamlit UI does not keep a Telegram listener alive. For Telegram commands at any time, run a separate worker:
-```bat
-python telegram_bot.py
-```
-The bot and dashboard can use the same `.env` locally. Add these environment variables to the worker:
-- `TELEGRAM_BOT_TOKEN`
-- `TELEGRAM_CHAT_ID` (the private chat that is authorised to control the scanner)
-- Optional `TELEGRAM_ALLOWED_CHAT_IDS` (comma-separated extra authorised chat IDs)
-
-Open Telegram and use `/start`. It displays buttons:
-- Scan 250 stocks
-- Scan 500 stocks
-- Refresh NSE
-- Refresh BSE
-- Refresh NSE + BSE
-- Universe status
-
-Commands also work: `/scan 250`, `/scan 500`, `/refresh_nse`, `/refresh_bse`, `/refresh_all`, `/status`, `/help`.
-Only the configured chat ID and optional allow-list can control the scanner. Do not publish bot tokens or make the bot a public command endpoint.
-
-## Streamlit Community Cloud
-Deploy the repository branch `new`, main file `app.py`. Add root-level Secrets:
-```toml
-TELEGRAM_BOT_TOKEN = "your_bot_token"
-TELEGRAM_CHAT_ID = "your_private_chat_id"
-```
-The dashboard test and shortlist buttons use these secrets. The bot worker requires its own environment variables; Streamlit Secrets are not automatically shared with another hosting service.
-
-## Deploy Telegram worker on Render
-Use the included `render.yaml` Blueprint to create a Background Worker. Configure `TELEGRAM_BOT_TOKEN` and `TELEGRAM_CHAT_ID` in the Render environment. Render background workers require a paid instance; the free web service type is not a reliable always-on bot worker. For a no-hosting-cost test, run `python telegram_bot.py` on your own PC while it is powered on and connected.
-Use only one polling worker per bot token. Telegram long polling conflicts with a webhook or a second concurrent polling worker.
-
-## Telegram report format
-Each scan sends:
-1. Market/date and scan coverage summary.
-2. Top candidates priced up to ₹1,000.
-3. Top candidates priced above ₹1,000.
-4. Green/red icons for positive/negative returns, yellow/green/red risk flags, and individual entries/stops/targets.
+For local Telegram long polling only, `python telegram_bot.py` remains available. Do not run polling and webhook mode at the same time with the same Telegram bot token.
 
 ## Forward-test ledger
-The dashboard and worker write to a local CSV under `data/recommendation_ledger.csv`. Separate hosting services do not share their local filesystems, and local disks may be reset during redeploys. Use a shared persistent database for a durable cross-service ledger if required.
+The dashboard uses a local CSV ledger under `data/recommendation_ledger.csv`. The GitHub Actions runner also writes to a temporary workspace; Actions cache may restore/save the universe files, but it is not a guaranteed permanent database for a trade ledger.
 
 ## Security
-Never commit `.env` or credentials to Git. Rotate any token that has ever been committed to a public repository. Telegram bot commands are restricted to configured chat IDs.
+- Never commit `.env`, Telegram tokens or GitHub PATs.
+- Rotate any token ever committed publicly.
+- Restrict the Telegram bot to your personal chat ID.
+- Use a fine-grained GitHub token with repository-only Actions write permission.
