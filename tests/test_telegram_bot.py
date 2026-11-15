@@ -41,10 +41,11 @@ class TelegramFormattingTests(unittest.TestCase):
             "high": pd.DataFrame(columns=["symbol"]),
         }
         messages = format_scan_messages(result)
-        self.assertEqual(len(messages), 4)
-        self.assertIn("PRICE ≤ ₹1,000", messages[1])
-        self.assertIn("PRICE > ₹1,000", messages[2])
-        self.assertIn("LOW", messages[1])
+        self.assertEqual(len(messages), 5)
+        self.assertIn("GLOBAL & INDIA MACRO SNAPSHOT", messages[1])
+        self.assertIn("PRICE ≤ ₹1,000", messages[2])
+        self.assertIn("PRICE > ₹1,000", messages[3])
+        self.assertIn("LOW", messages[2])
 
 
 if __name__ == "__main__":
