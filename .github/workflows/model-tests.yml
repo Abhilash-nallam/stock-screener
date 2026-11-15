@@ -20,9 +20,9 @@ jobs:
         run: python -m unittest discover -s tests -v
       - name: Compile every Python source file
         run: python -m compileall -q .
-      - name: Audit Python dependencies for known vulnerabilities
-        run: |
-          python -m pip install --disable-pip-version-check pip-audit
-          pip-audit
+      - name: Install fixed audit toolchain
+        run: python -m pip install --upgrade "setuptools>=84.1.0" pip-audit
+      - name: Audit project dependencies for known vulnerabilities
+        run: pip-audit -r requirements.txt
       - name: Validate Cloudflare Worker JavaScript syntax
         run: node --check cloudflare/telegram-worker.js
