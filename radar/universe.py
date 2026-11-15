@@ -72,6 +72,8 @@ def fetch_nse_universe():
         & out["company"].ne("")
     ].drop_duplicates("symbol").sort_values("symbol")
     out["yahoo_symbol"] = out["symbol"] + ".NS"
+    if out.empty:
+        raise ValueError("NSE equity CSV contained no valid EQ securities; previous cache was preserved.")
 
     DATA_DIR.mkdir(parents=True, exist_ok=True)
     out.to_csv(NSE_CACHE, index=False)
@@ -236,12 +238,41 @@ def fetch_bse_universe():
     return out
 
 
+def _load_cached_universe(path, exchange):
+    """Load a validated exchange cache; reject malformed or cross-exchange rows."""
+    if not path.exists():
+        return pd.DataFrame(columns=["symbol", "company", "exchange", "sector", "isin", "yahoo_symbol"])
+    try:
+        frame = pd.read_csv(path, dtype=str).fillna("")
+    except Exception:
+        return pd.DataFrame(columns=["symbol", "company", "exchange", "sector", "isin", "yahoo_symbol"])
+    required = {"symbol", "company", "exchange", "yahoo_symbol"}
+    if not required.issubset(frame.columns):
+        return pd.DataFrame(columns=["symbol", "company", "exchange", "sector", "isin", "yahoo_symbol"])
+    for column in ("sector", "isin"):
+        if column not in frame.columns:
+            frame[column] = ""
+    frame["symbol"] = frame["symbol"].astype(str).str.strip().str.upper()
+    frame["company"] = frame["company"].astype(str).str.strip()
+    frame["exchange"] = frame["exchange"].astype(str).str.strip().str.upper()
+    frame["yahoo_symbol"] = frame["yahoo_symbol"].astype(str).str.strip().str.upper()
+    suffix = ".NS" if exchange == "NSE" else ".BO"
+    frame = frame[
+        frame["exchange"].eq(exchange)
+        & frame["symbol"].ne("")
+        & frame["company"].ne("")
+        & frame["yahoo_symbol"].str.endswith(suffix)
+    ]
+    frame = frame.drop_duplicates("yahoo_symbol").reset_index(drop=True)
+    return frame[["symbol", "company", "exchange", "sector", "isin", "yahoo_symbol"]]
+
+
 def load_cached_nse_universe():
-    return pd.read_csv(NSE_CACHE).fillna("") if NSE_CACHE.exists() else pd.DataFrame()
+    return _load_cached_universe(NSE_CACHE, "NSE")
 
 
 def load_cached_bse_universe():
-    return pd.read_csv(BSE_CACHE).fillna("") if BSE_CACHE.exists() else pd.DataFrame()
+    return _load_cached_universe(BSE_CACHE, "BSE")
 
 
 def combine_universe(nse, bse=None):
