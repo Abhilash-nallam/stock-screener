@@ -35,7 +35,7 @@ class TelegramFormattingTests(unittest.TestCase):
             "atr_pct": 2.2,
         }
         card = _stock_card(row, 1)
-        for text in ("TEST", "Test Limited", "LIVE price", "Live score", "Entry zone",
+        for text in ("TEST", "Test Limited", "Latest 5m close", "Intraday score", "Entry zone",
                      "Stop:", "Targets", "RSI", "Confirmation", "CONFIRMED WATCHLIST"):
             self.assertIn(text, card)
         self.assertIn("\n", card)
