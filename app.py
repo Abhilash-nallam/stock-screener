@@ -209,5 +209,5 @@ st.divider()
 st.caption(
     "Data limitations: no official delivery-volume, full FII/DII, audited fundamental or "
     "corporate-announcement classifier is integrated. Model scores are rankings, not "
-    "probabilities of profit. Dhan/Groww panels, when configured, are read-only."
+    "probabilities of profit. No broker holdings or order interfaces are exposed here."
 )
