@@ -78,6 +78,18 @@ class LiveSignalTests(unittest.TestCase):
         self.assertFalse(result["live_eligible"])
         self.assertIn("Daily model risk is High", result["live_reason"])
 
+    def test_extremely_overbought_daily_rsi_blocks_recommendation(self):
+        daily = dict(self.daily, rsi=86.0)
+        result = build_live_signal(daily, self.snapshot, self.detail, nifty_change_pct=0, now=self.now)
+        self.assertFalse(result["live_eligible"])
+        self.assertIn("extremely overbought", result["live_reason"])
+
+    def test_negative_official_news_flag_blocks_recommendation(self):
+        daily = dict(self.daily, news_flags=["Negative NSE headline"])
+        result = build_live_signal(daily, self.snapshot, self.detail, nifty_change_pct=0, now=self.now)
+        self.assertFalse(result["live_eligible"])
+        self.assertIn("negative official", result["live_reason"])
+
     def test_nifty_candle_time_alignment_blocks_stale_comparison(self):
         result = build_live_signal(
             self.daily, self.snapshot, self.detail, nifty_change_pct=0, now=self.now,
