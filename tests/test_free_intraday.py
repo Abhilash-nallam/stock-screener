@@ -67,7 +67,7 @@ class FreeIntradayTests(unittest.TestCase):
 
     def test_custom_session_open_supports_special_session(self):
         now = datetime(2026, 11, 8, 14, 55, tzinfo=IST)
-        stamps = pd.date_range("2026-11-08 14:20:00", periods=8, freq="5min", tz=IST)
+        stamps = pd.date_range("2026-11-08 14:20:00", periods=7, freq="5min", tz=IST)
         frame = self._frame()
         frame.index = stamps
         with patch("radar.free_data.yf.download", return_value=frame):
