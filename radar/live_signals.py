@@ -182,6 +182,15 @@ def build_live_signal(
     daily_risk = str(daily_row.get("risk", "")).strip().lower()
     if daily_risk == "high":
         reasons.append("Daily model risk is High; excluded from live-confirmed picks")
+    daily_rsi = _number(daily_row.get("rsi"))
+    if daily_rsi is not None and daily_rsi >= 85.0:
+        reasons.append("Daily RSI is extremely overbought (85+); avoid chasing")
+    official_flags = daily_row.get("news_flags") or []
+    if isinstance(official_flags, str):
+        official_flags = [official_flags] if official_flags else []
+    negative_official_news = bool(official_flags)
+    if negative_official_news:
+        reasons.append("A negative official company/regulatory headline is flagged; manual review required")
 
     live_score = (
         0.45 * _clip(score_daily)
@@ -233,6 +242,8 @@ def build_live_signal(
         and (gap_pct is None or -2.0 <= gap_pct <= 3.5)
         and (relative_to_nifty is None or relative_to_nifty >= -0.15)
         and daily_risk != "high"
+        and not (daily_rsi is not None and daily_rsi >= 85.0)
+        and not negative_official_news
         and nifty_alignment_ok
         and live_score >= 68
         and not (
