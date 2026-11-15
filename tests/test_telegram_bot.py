@@ -23,6 +23,16 @@ class TelegramFormattingTests(unittest.TestCase):
             "target1": 140, "target2": 150, "risk": "Moderate",
             "rsi": 61, "rvol": 1.8, "setup_status": "Watchlist candidate",
             "reasons": ["Trend positive", "Relative strength positive"],
+            "live_price": 125.50, "live_score": 84.0,
+            "live_status": "CONFIRMED WATCHLIST — verify before entry",
+            "live_quote_time": "09:45:00 IST", "live_quote_age_seconds": 5,
+            "live_change_pct": 1.65, "live_gap_pct": 0.5, "live_intraday_pct": 1.1,
+            "live_vwap": 124.8, "live_vwap_distance_pct": 0.56,
+            "live_5m_momentum_pct": 0.4, "live_relative_strength_pct": 0.7,
+            "live_entry_low": 125.2, "live_entry_high": 125.8,
+            "live_stop": 121.0, "live_target1": 130.0, "live_target2": 134.0,
+            "live_reason": "Price above session VWAP and positive completed 5-minute momentum",
+            "atr_pct": 2.2,
         }
         card = _stock_card(row, 1)
         for text in ("TEST", "Test Limited", "LIVE price", "Live score", "Entry zone",
