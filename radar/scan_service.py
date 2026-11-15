@@ -176,6 +176,7 @@ def run_scan(limit=250, min_score=60, news_limit=6, workers=6):
                 continue
             scored = score_stock(meta, completed, market)
             results.append({**meta, **scored})
+            histories[f"{str(meta.get('exchange', '')).upper()}:{str(meta.get('symbol', ''))}"] = completed
             histories[str(meta.get("symbol", ""))] = completed
         except Exception:
             continue
