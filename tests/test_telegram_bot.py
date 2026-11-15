@@ -30,6 +30,10 @@ class TelegramFormattingTests(unittest.TestCase):
             self.assertIn(text, card)
         self.assertIn("\n", card)
         self.assertNotIn("\\n", card)
+        self.assertIn("RSI:</b> 61.0", card)
+        self.assertIn("Rel. volume:</b> 1.80x", card)
+        self.assertNotIn("RSI:</b> ₹", card)
+        self.assertNotIn("Rel. volume:</b> ₹", card)
 
     def test_scan_report_has_readable_sections_and_price_buckets(self):
         result = {
