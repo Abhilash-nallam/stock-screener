@@ -41,6 +41,7 @@ SPECIAL_SESSIONS = {
         "name": "Diwali Muhurat Trading",
         "pre_open": time(14, 5),
         "open": time(14, 20),
+        # Equity cash non-CAS instruments trade until 15:30; F&O continues to 15:40.
         "close": time(15, 30),
     }
 }
