@@ -210,8 +210,10 @@ def select_scan_universe(universe, limit, as_of=None):
     bse_count = min(len(bse), limit - nse_count)
     # Stable within a calendar day; advances across the full sorted exchange list
     # on each new India calendar day, instead of scanning only the first symbols.
-    from datetime import date
-    day_index = (as_of or date.today()).toordinal()
+    from datetime import date, datetime
+    from zoneinfo import ZoneInfo
+    india_today = datetime.now(ZoneInfo("Asia/Kolkata")).date()
+    day_index = (as_of or india_today).toordinal()
 
     def rotating_slice(frame, count, offset):
         if frame.empty or count <= 0:
