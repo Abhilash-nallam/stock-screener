@@ -3,7 +3,7 @@
 Combines a previously completed daily technical score with a fresh Groww quote
 and completed 5-minute candles. This produces watch/avoid signals, not orders.
 """
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 import math
 from zoneinfo import ZoneInfo
 
@@ -72,7 +72,7 @@ def build_live_signal(
         for i in range(5)
     )
     candidate_candle_end = (
-        candles[-1]["time"] + __import__("datetime").timedelta(seconds=CANDLE_INTERVAL_SECONDS)
+        candles[-1]["time"] + timedelta(seconds=CANDLE_INTERVAL_SECONDS)
         if candles and candles[-1].get("time") is not None else None
     )
     nifty_alignment_ok = True
