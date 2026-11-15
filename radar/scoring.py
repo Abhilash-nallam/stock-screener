@@ -45,8 +45,16 @@ def apply_news_overlay(base_score,headlines):
             freshness=0.0 if age is None else max(0.15,1-max(0.0,float(age))/120)
             weight=max(0.0,confidence*source_weight*freshness)
             if weight: weighted.append((sentiment,weight))
-            if item.get("source_type") in ("exchange","regulator") and sentiment<=-0.5 and confidence>=0.5:
-                flags.append(f"Negative {item.get('source','official')} headline")
+            # An official negative headline can veto a live pick only when
+            # its publication time is known and the evidence is recent.
+            verified_recent = age is not None and 0 <= float(age) <= 48
+            if (
+                verified_recent
+                and item.get("source_type") in ("exchange", "regulator")
+                and sentiment <= -0.5
+                and confidence >= 0.5
+            ):
+                flags.append(f"Negative {item.get('source', 'official')} headline")
         except (TypeError,ValueError):
             continue
     if not weighted: return round(float(base_score),1),None,0.0,sorted(set(flags))
