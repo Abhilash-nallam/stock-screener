@@ -12,12 +12,13 @@ import yfinance as yf
 
 IST = ZoneInfo("Asia/Kolkata")
 YAHOO_INTRADAY_PROVIDER = "Yahoo Finance public 5-minute chart data (delay/availability not guaranteed)"
+MAX_INTRADAY_AGE_SECONDS = 600
 
 
 def fetch_daily_history(symbol, period="1y"):
     try:
         frame = yf.download(
-            symbol, period=period, interval="1d", auto_adjust=True,
+            symbol, period=period, interval="1d", auto_adjust=False,
             progress=False, threads=False, timeout=22
         )
     except Exception:
@@ -30,9 +31,21 @@ def fetch_daily_history(symbol, period="1y"):
     needed = ["Open", "High", "Low", "Close", "Volume"]
     if not set(needed).issubset(frame.columns):
         return pd.DataFrame()
-    frame = frame[needed].apply(pd.to_numeric, errors="coerce").dropna()
+    columns = needed + (["Adj Close"] if "Adj Close" in frame.columns else [])
+    frame = frame[columns].apply(pd.to_numeric, errors="coerce").dropna(subset=needed)
     frame = frame[~frame.index.duplicated(keep="last")].sort_index()
-    return frame[(frame.Close > 0) & (frame.Volume >= 0)]
+    frame = frame[(frame.Close > 0) & (frame.Volume >= 0)]
+    # Preserve split/dividend-adjusted history while normalising today's
+    # adjusted OHLC back to the current raw close. This keeps today's daily
+    # baseline comparable with raw intraday 5-minute prices.
+    if "Adj Close" in frame.columns and not frame.empty:
+        ratio = (frame["Adj Close"] / frame["Close"]).replace([float("inf"), -float("inf")], pd.NA)
+        if ratio.notna().any() and float(ratio.dropna().iloc[-1]) > 0:
+            scale = ratio / float(ratio.dropna().iloc[-1])
+            for column in ("Open", "High", "Low", "Close"):
+                frame[column] = frame[column] * scale
+        frame = frame.drop(columns=["Adj Close"])
+    return frame[needed]
 
 
 def _one(row):
@@ -239,6 +252,9 @@ def fetch_intraday_5m_snapshot(symbol, now=None, session_open=None):
         minute=(current.minute // 5) * 5, second=0, microsecond=0
     )
     start_time = session_open or clock_time(9, 15)
+    session_open_dt = current.replace(
+        hour=start_time.hour, minute=start_time.minute, second=0, microsecond=0
+    )
     candles = []
     for stamp, row in frame.iterrows():
         ts = pd.Timestamp(stamp)
@@ -274,8 +290,15 @@ def fetch_intraday_5m_snapshot(symbol, now=None, session_open=None):
 
     first = candles[0]
     last = candles[-1]
+    # Require the true first session candle; otherwise the opening gap would
+    # be calculated from a later candle and could be materially wrong.
+    if first["time"] != session_open_dt:
+        return None
+
     last_bar_end = last["time"] + timedelta(minutes=5)
-    age_seconds = max(0.0, (current - last_bar_end).total_seconds())
+    age_seconds = (current - last_bar_end).total_seconds()
+    if age_seconds < -30 or age_seconds > MAX_INTRADAY_AGE_SECONDS:
+        return None
     snapshot = {
         "price": last["close"],
         "ohlc": {
@@ -299,7 +322,7 @@ def fetch_intraday_5m_snapshot(symbol, now=None, session_open=None):
         "candles": candles,
         "provider": YAHOO_INTRADAY_PROVIDER,
         "timestamp_label": "last completed 5m candle",
-        "max_age_seconds": 1200,
+        "max_age_seconds": MAX_INTRADAY_AGE_SECONDS,
         "age_seconds": round(age_seconds, 1),
     }
     return {"snapshot": snapshot, "detail": detail}
