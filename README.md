@@ -98,7 +98,7 @@ streamlit run app.py
 For local Telegram long polling only, `python telegram_bot.py` remains available. Do not run polling and webhook mode at the same time with the same Telegram bot token.
 
 ## Forward-test ledger
-The dashboard uses a local CSV ledger under `data/recommendation_ledger.csv`. The GitHub Actions cache now stores only the NSE/BSE universe files and their refresh metadata, not the trade ledger. GitHub-hosted runners are temporary, so the forward-test ledger written by Telegram scans is not guaranteed to persist between runs.
+The dashboard uses a local CSV ledger under `data/recommendation_ledger.csv`. The GitHub Actions cache stores the exchange universe, refresh metadata and the temporary CSV forward-test ledger under `data/`. This cache is subject to GitHub retention and eviction; it is not a guaranteed permanent database.
 
 ## Security
 - Never commit `.env`, Telegram tokens, Cloudflare secrets, broker tokens or GitHub PATs.
