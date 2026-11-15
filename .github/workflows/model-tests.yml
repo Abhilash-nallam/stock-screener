@@ -10,15 +10,19 @@ jobs:
   unit-tests:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: "3.11"
       - name: Install project dependencies
         run: python -m pip install --upgrade pip && pip install -r requirements.txt
       - name: Run unit tests
         run: python -m unittest discover -s tests -v
-      - name: Compile Python Telegram entry points
-        run: python -m py_compile telegram_action.py telegram_bot.py
+      - name: Compile every Python source file
+        run: python -m compileall -q .
+      - name: Audit Python dependencies for known vulnerabilities
+        run: |
+          python -m pip install --disable-pip-version-check pip-audit
+          pip-audit -r requirements-bot.txt
       - name: Validate Cloudflare Worker JavaScript syntax
         run: node --check cloudflare/telegram-worker.js
