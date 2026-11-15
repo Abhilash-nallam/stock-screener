@@ -69,6 +69,31 @@ class NewsPipelineTests(unittest.TestCase):
         self.assertEqual(adjustment, 0.0)
         self.assertEqual(flags, [])
 
+    def test_undated_official_negative_story_does_not_veto_pick(self):
+        headline = {
+            "sentiment": -1.0,
+            "sentiment_confidence": 1.0,
+            "source_weight": 1.0,
+            "age_hours": None,
+            "source_type": "exchange",
+            "source": "NSE",
+        }
+        _, _, adjustment, flags = apply_news_overlay(75, [headline])
+        self.assertEqual(adjustment, 0.0)
+        self.assertEqual(flags, [])
+
+    def test_old_official_negative_story_does_not_veto_pick(self):
+        headline = {
+            "sentiment": -1.0,
+            "sentiment_confidence": 1.0,
+            "source_weight": 1.0,
+            "age_hours": 72,
+            "source_type": "regulator",
+            "source": "SEBI",
+        }
+        _, _, adjustment, flags = apply_news_overlay(75, [headline])
+        self.assertEqual(flags, [])
+
     def test_official_negative_headline_is_flagged(self):
         headline = {
             "sentiment": -1.0,
