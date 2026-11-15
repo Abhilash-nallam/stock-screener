@@ -1,11 +1,12 @@
+import hmac
+import os
+
 import pandas as pd
 import streamlit as st
 from dotenv import load_dotenv
 
 from radar.ledger import read_ledger
 from radar.scan_service import refresh_both, refresh_exchange, run_scan, universe_status
-from radar.telegram import send_telegram
-from radar.brokers import fetch_broker_accounts
 from radar.market_clock import format_market_status, get_market_status
 
 load_dotenv()
@@ -19,6 +20,26 @@ with st.sidebar:
     scan_size = st.selectbox("Stocks per scan", [250, 500], index=0)
     min_score = st.slider("Minimum radar score", 0, 100, 60)
     news_limit = st.slider("Headlines per leading stock", 3, 10, 6)
+
+    # Streamlit Community Cloud apps are public unless the user adds their own
+    # authentication. Require a password before allowing expensive scans.
+    dashboard_password = os.getenv("RADAR_DASHBOARD_PASSWORD", "").strip()
+    try:
+        dashboard_password = dashboard_password or str(st.secrets.get("RADAR_DASHBOARD_PASSWORD", "")).strip()
+    except Exception:
+        pass
+    entered_password = st.text_input("Private dashboard password", type="password")
+    admin_enabled = bool(
+        dashboard_password
+        and entered_password
+        and hmac.compare_digest(entered_password, dashboard_password)
+    )
+    if admin_enabled:
+        st.success("Private scan controls unlocked for this session.")
+    elif dashboard_password:
+        st.caption("Enter the configured password to enable manual scans.")
+    else:
+        st.caption("Dashboard scan controls are disabled until RADAR_DASHBOARD_PASSWORD is configured.")
 
     st.divider()
     st.subheader("Exchange universes")
@@ -55,7 +76,7 @@ st.warning(
     "Verify the live price, spread, news and risk in your broker app before trading."
 )
 
-if st.button(f"Run {scan_size}-stock scan", type="primary", use_container_width=True):
+if admin_enabled and st.button(f"Run {scan_size}-stock scan", type="primary", use_container_width=True):
     progress = st.progress(0, text=f"Starting {scan_size}-stock scan...")
     try:
         result = run_scan(limit=scan_size, min_score=min_score, news_limit=news_limit, workers=6)
@@ -158,29 +179,7 @@ if result:
         show_bucket("🟢 Intraday-confirmed · Price ≤ ₹1,000", result.get("low"))
         show_bucket("🔵 Intraday-confirmed · Price > ₹1,000", result.get("high"))
 
-        st.subheader("Telegram alerts")
-        test_col, send_col = st.columns(2)
-        with test_col:
-            if st.button("Test Telegram connection"):
-                try:
-                    send_telegram("✅ India Stock Radar test successful. Telegram delivery is working.")
-                    st.success("Test message delivered.")
-                except Exception as exc:
-                    st.error(f"Telegram test failed: {exc}")
-        with send_col:
-            if st.button("Send current shortlist to Telegram"):
-                try:
-                    message = (
-                        f"🇮🇳 INDIA STOCK RADAR · {result.get('data_date', 'n/a')}\n"
-                        f"Nifty daily regime {str(market.get('regime', 'unknown')).upper()} · "
-                        f"latest Nifty 5m move {nifty_change}%\n"
-                        f"Intraday confirmed: {result.get('live_confirmed_count', 0)}. "
-                        "Check Telegram for detailed cards."
-                    )
-                    send_telegram(message)
-                    st.success("Telegram summary sent.")
-                except Exception as exc:
-                    st.error(f"Telegram send failed: {exc}")
+        st.info("Telegram commands are handled by your private Telegram bot and GitHub Actions. This dashboard does not send messages.")
 
         st.divider()
         st.subheader("Forward-test ledger")
@@ -210,21 +209,3 @@ st.caption(
     "corporate-announcement classifier is integrated. Model scores are rankings, not "
     "probabilities of profit. Dhan/Groww panels, when configured, are read-only."
 )
-
-st.header("Broker accounts — optional read-only connection")
-if st.button("Fetch Dhan + Groww holdings, positions and funds"):
-    with st.spinner("Connecting to read-only broker APIs..."):
-        st.session_state["broker_accounts"] = fetch_broker_accounts()
-if "broker_accounts" in st.session_state:
-    for broker, response in st.session_state["broker_accounts"].items():
-        st.subheader(broker)
-        if not response["ok"]:
-            st.warning(response["error"])
-            continue
-        data = response["data"]
-        st.success("Connected — read-only account data received")
-        st.write(f"Holdings: {len(data.get('holdings', []))} · Open positions: {len(data.get('positions', []))}")
-        if data.get("holdings"):
-            st.dataframe(pd.DataFrame(data["holdings"]), use_container_width=True, hide_index=True)
-        if data.get("positions"):
-            st.dataframe(pd.DataFrame(data["positions"]), use_container_width=True, hide_index=True)
