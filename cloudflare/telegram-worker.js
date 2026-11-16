@@ -84,6 +84,10 @@ function checkCommandRateLimit(chatId) {
   }
 }
 
+async function showSupport(env, chatId) {
+  await sendMessage(env, chatId, "🛟 <b>INDIA STOCK RADAR — SUPPORT</b>\n\nNeed any help or technical support?\nPlease contact our support bot: <a href=\"https://t.me/DigitalSupportDesk_Bot\">@DigitalSupportDesk_Bot</a>\n\nWe will assist you there.", { parse_mode: "HTML" });
+}
+
 async function showMenu(env, chatId, intro = true) {
   const text = intro
     ? "<b>🇮🇳 INDIA STOCK RADAR</b>\nChoose an action. Scans run on GitHub's cloud runner and the report returns here.\n\nCommands: /fetch 250, /fetch 500, /refresh_nse, /refresh_bse, /refresh_all, /status"
@@ -150,7 +154,11 @@ async function answerCallback(env, callbackId, text = "Request received") {
 }
 
 async function runAction(env, chatId, action) {
-  if (action === "help" || action === "menu") {
+  if (action === "help") {
+    await showSupport(env, chatId);
+    return;
+  }
+  if (action === "menu") {
     await showMenu(env, chatId, true);
     return;
   }
@@ -189,8 +197,10 @@ async function handleMessage(env, message) {
   const parts = raw.split(/\s+/);
   const command = parts[0].split("@")[0].toLowerCase();
 
-  if (command === "/start" || command === "/help") {
+  if (command === "/start" || command === "/menu") {
     await showMenu(env, chatId, true);
+  } else if (command === "/help") {
+    await showSupport(env, chatId);
   } else if (command === "/menu") {
     await showMenu(env, chatId, true);
   } else if (command === "/scan" || command === "/fetch") {
@@ -279,7 +289,7 @@ async function registerWebhook(request, env) {
       { command: "refresh_bse", description: "Refresh BSE universe" },
       { command: "refresh_all", description: "Refresh both exchange universes" },
       { command: "status", description: "Show cached universe counts" },
-      { command: "help", description: "Show bot help and buttons" }
+      { command: "help", description: "Contact support desk" }
     ]
   });
   return json({ ok: true, webhook_registered: result === true });
