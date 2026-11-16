@@ -11,7 +11,7 @@ A private-command Telegram scanner with an optional Streamlit dashboard.
 The GitHub repository must remain public to use the unlimited standard hosted-runner allowance described by GitHub. Cloudflare Workers Free has service limits; this is not an unlimited compute plan.
 
 ## Telegram features
-- `/start` or `/help`: show the inline action menu.
+- `/start` or `/menu`: show the inline action menu. `/help` and the Help button direct users to the dedicated support bot [@DigitalSupportDesk_Bot](https://t.me/DigitalSupportDesk_Bot).
 - `/fetch 250` or `/fetch 500`: run the scan and send the report back in Telegram.
 - `/refresh_nse`, `/refresh_bse`, `/refresh_all`: refresh exchange universes.
 - `/status`: report cached NSE/BSE universe counts.
