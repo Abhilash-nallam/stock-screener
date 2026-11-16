@@ -113,12 +113,15 @@ def _empty_result(market_session, message, **extra):
     }
 
 
-def _completed_history(history, session_date):
-    """Remove the current day's unfinished daily bar before daily scoring."""
+def _completed_history(history, session_date, include_session_date=False):
+    """Exclude today's partial bar during market hours; allow it after the close."""
     if history is None or history.empty:
         return pd.DataFrame()
     index = pd.to_datetime(history.index)
-    keep = [stamp.date() < session_date for stamp in index]
+    if include_session_date:
+        keep = [stamp.date() <= session_date for stamp in index]
+    else:
+        keep = [stamp.date() < session_date for stamp in index]
     return history.loc[keep].copy()
 
 
@@ -181,7 +184,11 @@ def run_scan(limit=250, min_score=60, news_limit=6, workers=6):
     results, histories = [], {}
     for meta, history in downloaded:
         try:
-            completed = _completed_history(history, session_date)
+            completed = _completed_history(
+                history,
+                session_date,
+                include_session_date=(market_session.get("phase") == "post_market"),
+            )
             if len(completed) < 61:
                 continue
             scored = score_stock(meta, completed, market)
