@@ -195,23 +195,93 @@ def _bucket_messages(title, rows):
     return messages
 
 
+def _delivery_card(row, rank):
+    """Daily-timeframe candidate card; never imply intraday confirmation."""
+    symbol = html.escape(str(row.get("symbol", "—")))
+    company = html.escape(str(row.get("company", "—")))
+    exchange = html.escape(str(row.get("exchange", "NSE")).upper())
+    news = _as_list(row.get("news"))
+    flags = _as_list(row.get("news_flags"))
+    lines = [
+        f"<b>{rank}. {symbol} — {company}</b> ({exchange})",
+        f"💰 <b>Latest completed daily close:</b> {_money(row.get('price'))} · <b>Daily score:</b> {_number(row.get('score'))}/100",
+        f"📈 <b>Returns:</b> 1D {_pct(row.get('change_1d_pct'))} · 5D {_pct(row.get('ret5_pct'))} · 20D {_pct(row.get('ret20_pct'))} · 60D {_pct(row.get('ret60_pct'))}",
+        f"🧭 <b>Trend:</b> RSI {_number(row.get('rsi'))} · ADX {_number(row.get('adx'))} · 55D high distance {_pct(row.get('distance_55d_high_pct'))}",
+        f"💧 <b>Liquidity:</b> median 20D turnover {_money(row.get('turnover20'))} · relative volume {_number(row.get('rvol'), 2)}",
+        f"🎯 <b>Daily reference zone:</b> {_money(row.get('entry_low'))} – {_money(row.get('entry_high'))}",
+        f"🛑 <b>Stop reference:</b> {_money(row.get('stop_loss'))} · <b>Targets:</b> T1 {_money(row.get('target1'))} · T2 {_money(row.get('target2'))}",
+        f"⚠️ <b>Risk:</b> {_risk(row.get('risk'))} · <b>Data date:</b> {html.escape(str(row.get('data_date', 'n/a')))}",
+        "<i>Daily-timeframe research candidate for delivery-style due diligence; not an intraday buy signal or a guaranteed return.</i>",
+    ]
+    if flags:
+        lines.append(f"🚩 <b>Risk flags:</b> {html.escape('; '.join(str(x) for x in flags)[:200])}")
+    if news:
+        top = news[0]
+        source = html.escape(str(top.get("publisher") or top.get("source") or "News"))
+        title = html.escape(str(top.get("title") or "")[:160])
+        date = html.escape(_headline_date(top))
+        link = str(top.get("link") or "")
+        if link.startswith(("https://", "http://")):
+            lines.append(f"📰 <b>Company news ({date}):</b> <a href=\"{html.escape(link, quote=True)}\">{title}</a> · {source}")
+        else:
+            lines.append(f"📰 <b>Company news ({date}):</b> {title} · {source}")
+    return "\n".join(lines)
+
+
+def _delivery_bucket_messages(title, rows):
+    heading = (
+        f"<b>{title}</b>\n"
+        "<i>Top daily-model watchlist from completed daily candles. Review fundamentals, valuation, "
+        "corporate filings and holding horizon before investing.</i>"
+    )
+    if rows is None or rows.empty:
+        return [heading + "\n\n⚪ No candidate passed the current daily eligibility and risk filters."]
+    messages = []
+    current = heading
+    for rank, (_, row) in enumerate(rows.iterrows(), 1):
+        card = _delivery_card(row, rank)
+        proposed = current + "\n\n━━━━━━━━━━━━━━━━━━\n\n" + card
+        if len(proposed) > 3500 and current != heading:
+            messages.append(current)
+            current = heading + " (continued)"
+            proposed = current + "\n\n━━━━━━━━━━━━━━━━━━\n\n" + card
+        current = proposed
+    messages.append(current)
+    return messages
+
+
 def format_scan_messages(result):
     """Format market state or a live-confirmed report; never call daily-only picks live."""
     session = result.get("market_session") or {}
     phase = str(session.get("phase", "unknown"))
+    delivery_sections = (
+        _delivery_bucket_messages("🟣 DELIVERY / SWING WATCHLIST — PRICE ≤ ₹1,000", result.get("delivery_low"))
+        + _delivery_bucket_messages("🟣 DELIVERY / SWING WATCHLIST — PRICE > ₹1,000", result.get("delivery_high"))
+    )
     if phase != "open":
+        if result.get("delivery_low") is not None or result.get("delivery_high") is not None:
+            header = (
+                "<b>🇮🇳 INDIA STOCK RADAR — DAILY DELIVERY RESEARCH</b>\n"
+                f"🗓 Market status: <b>{html.escape(phase.upper())}</b> · {html.escape(str(session.get('local_date', '')))}\n"
+                f"📚 Daily data through: <b>{html.escape(str(result.get('data_date') or 'unavailable'))}</b>\n"
+                f"🔎 Scanned: {result.get('success_count', 0)}/{result.get('selected_count', 0)} usable histories · "
+                f"{result.get('candidate_count', 0)} daily candidates\n"
+                "<i>Intraday confirmation is unavailable while the market is closed. These are research watchlists, not buy calls.</i>"
+            )
+            return [header] + delivery_sections
         from radar.market_clock import format_market_status
         return [format_market_status(session)]
 
     if not result.get("live_ready", False):
         reason = html.escape(str(result.get("live_error") or "Live market data is unavailable.")[:900])
-        return [
-            "<b>🟠 INDIA STOCK RADAR — LIVE SCAN BLOCKED</b>\n"
+        blocked = (
+            "<b>🟠 INDIA STOCK RADAR — INTRADAY DATA UNAVAILABLE</b>\n"
             f"🟢 NSE session: <b>OPEN</b> ({html.escape(str(session.get('local_time', '')))} IST)\n"
-            "No candidates were generated because free intraday data was unavailable or could not be verified.\n\n"
-            f"<b>Reason:</b> {reason}\n\n"
-            "<i>No paid API or broker order was attempted. Retry later; stale or missing intraday candles are rejected.</i>"
-        ]
+            "No intraday-confirmed candidates were generated because free intraday data was unavailable or could not be verified.\n"
+            f"<b>Reason:</b> {reason}\n"
+            "<i>Daily delivery research is shown separately below. Intraday confirmation is not inferred.</i>"
+        )
+        return [blocked] + delivery_sections
 
     market = result.get("market") or {}
     regime = str(market.get("regime", "unknown")).upper()
@@ -313,6 +383,7 @@ def format_scan_messages(result):
                 headline_lines.append(f"• {text} — {source} · {date}")
     messages.append("\n".join(headline_lines))
 
+    messages.extend(delivery_sections)
     messages.extend(_bucket_messages("🟢 INTRADAY-CONFIRMED CANDIDATES — PRICE ≤ ₹1,000", result["low"]))
     messages.extend(_bucket_messages("🔵 INTRADAY-CONFIRMED CANDIDATES — PRICE > ₹1,000", result["high"]))
     return messages
