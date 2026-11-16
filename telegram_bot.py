@@ -320,14 +320,13 @@ def format_scan_messages(result):
 def show_support(chat_id):
     """Direct users to the dedicated support desk."""
     send_telegram(
-        "<b>INDIA STOCK RADAR — SUPPORT</b>\\n\\n"
-        "Need any help or technical support?\\n"
+        "<b>INDIA STOCK RADAR — SUPPORT</b>\n\n"
+        "Need any help or technical support?\n"
         "Please contact our support bot: "
-        '<a href="https://t.me/DigitalSupportDesk_Bot">@DigitalSupportDesk_Bot</a>\\n\\n'
+        '<a href="https://t.me/DigitalSupportDesk_Bot">@DigitalSupportDesk_Bot</a>\n\n'
         "We will assist you there.",
         chat_id=chat_id,
         parse_mode="HTML",
-        disable_web_page_preview=True,
     )
 
 def show_menu(chat_id, greeting=True):
