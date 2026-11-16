@@ -317,6 +317,19 @@ def format_scan_messages(result):
     messages.extend(_bucket_messages("🔵 INTRADAY-CONFIRMED CANDIDATES — PRICE > ₹1,000", result["high"]))
     return messages
 
+def show_support(chat_id):
+    """Direct users to the dedicated support desk."""
+    send_telegram(
+        "<b>INDIA STOCK RADAR — SUPPORT</b>\\n\\n"
+        "Need any help or technical support?\\n"
+        "Please contact our support bot: "
+        '<a href="https://t.me/DigitalSupportDesk_Bot">@DigitalSupportDesk_Bot</a>\\n\\n'
+        "We will assist you there.",
+        chat_id=chat_id,
+        parse_mode="HTML",
+        disable_web_page_preview=True,
+    )
+
 def show_menu(chat_id, greeting=True):
     message = (
         "<b>India Stock Radar Bot</b>\n"
@@ -413,8 +426,10 @@ def handle_message(message):
         return
     parts = raw.split()
     command = parts[0].split("@", 1)[0].lower()
-    if command in ("/start", "/help"):
+    if command in ("/start", "/menu"):
         show_menu(chat_id, greeting=True)
+    elif command == "/help":
+        show_support(chat_id)
     elif command in ("/scan", "/fetch"):
         if len(parts) > 1:
             try:
@@ -431,10 +446,8 @@ def handle_message(message):
         _start_refresh(chat_id, "both")
     elif command in ("/status", "/universe"):
         send_telegram(_status_text(), chat_id=chat_id)
-    elif command == "/menu":
-        show_menu(chat_id, greeting=True)
     else:
-        send_telegram("I did not recognise that command. Send /help for available controls.", chat_id=chat_id)
+        send_telegram("I did not recognise that command. Send /menu for scan controls or /help for support.", chat_id=chat_id)
 
 
 def handle_callback(callback):
@@ -459,7 +472,7 @@ def handle_callback(callback):
     elif data == "status":
         send_telegram(_status_text(), chat_id=chat_id)
     elif data == "help":
-        show_menu(chat_id, greeting=True)
+        show_support(chat_id)
 
 
 def main():
@@ -478,7 +491,7 @@ def main():
         {"command": "status", "description": "Show cached exchange universe counts"},
         {"command": "universe", "description": "Show cached exchange universe counts"},
         {"command": "menu", "description": "Open scan and refresh buttons"},
-        {"command": "help", "description": "Show bot controls"},
+        {"command": "help", "description": "Contact support desk"},
     ]})
     log.info("India Stock Radar Telegram worker started")
     global OFFSET
