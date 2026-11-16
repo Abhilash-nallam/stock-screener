@@ -76,17 +76,42 @@ class TelegramFormattingTests(unittest.TestCase):
             "high": pd.DataFrame(columns=["symbol"]),
         }
         messages = format_scan_messages(result)
-        self.assertEqual(len(messages), 5)
+        self.assertEqual(len(messages), 7)
         self.assertIn("FREE INTRADAY SCAN", messages[0])
         self.assertIn("GLOBAL EQUITY MARKETS", messages[1])
         self.assertIn("RELEVANT NEWS", messages[2])
-        self.assertIn("PRICE ≤ ₹1,000", messages[3])
-        self.assertIn("PRICE > ₹1,000", messages[4])
+        self.assertIn("DELIVERY / SWING WATCHLIST", messages[3])
+        self.assertIn("DELIVERY / SWING WATCHLIST", messages[4])
+        self.assertIn("INTRADAY-CONFIRMED", messages[5])
+        self.assertIn("INTRADAY-CONFIRMED", messages[6])
         joined = "\n".join(messages)
         self.assertNotIn("\\n", joined)
         self.assertTrue(all(len(message) <= 4096 for message in messages))
-        self.assertIn("LOW", messages[3])
+        self.assertIn("LOW", messages[5])
 
+
+    def test_closed_market_report_shows_daily_delivery_candidates(self):
+        result = {
+            "market_session": {"phase": "post_market", "local_date": "2026-11-16"},
+            "data_date": "2026-11-16", "success_count": 245, "selected_count": 250,
+            "candidate_count": 9, "delivery_low": pd.DataFrame([{
+                "symbol": "DELIVERY", "company": "Delivery Co", "exchange": "NSE",
+                "price": 250.0, "score": 84.0, "change_1d_pct": 1.2,
+                "ret5_pct": 3.1, "ret20_pct": 8.4, "ret60_pct": 15.0,
+                "rsi": 61, "adx": 28, "distance_55d_high_pct": -1.5,
+                "turnover20": 125000000, "rvol": 1.6,
+                "entry_low": 245, "entry_high": 252, "stop_loss": 235,
+                "target1": 270, "target2": 285, "risk": "Moderate",
+                "data_date": "2026-11-16", "news": [], "news_flags": [],
+            }]),
+            "delivery_high": pd.DataFrame(columns=["symbol"]),
+        }
+        messages = format_scan_messages(result)
+        self.assertIn("DAILY DELIVERY RESEARCH", messages[0])
+        self.assertIn("DELIVERY", messages[1])
+        self.assertIn("Daily score", messages[1])
+        self.assertIn("not an intraday buy signal", messages[1])
+        self.assertIn("No candidate passed", messages[2])
 
 if __name__ == "__main__":
     unittest.main()
