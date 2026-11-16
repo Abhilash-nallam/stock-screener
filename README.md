@@ -12,11 +12,11 @@ The GitHub repository must remain public to use the unlimited standard hosted-ru
 
 ## Telegram features
 - `/start` or `/menu`: show the inline action menu. `/help` and the Help button direct users to the dedicated support bot [@DigitalSupportDesk_Bot](https://t.me/DigitalSupportDesk_Bot).
-- `/fetch 250` or `/fetch 500`: run the scan and send the report back in Telegram.
+- `/fetch 250` or `/fetch 500`: run the scan and send both daily delivery/swing watchlists and intraday-confirmed watchlists. Outside market hours, the command still runs completed-daily-candle research and reports delivery candidates; intraday confirmation is only attempted during the open session.
 - `/refresh_nse`, `/refresh_bse`, `/refresh_all`: refresh exchange universes.
 - `/status`: report cached NSE/BSE universe counts.
 - Inline buttons provide the same actions.
-- Reports contain market regime, coverage, live-confirmation status, top candidates in each price band, company/exchange, latest completed 5-minute candle close, daily model score, intraday score, 1D/5D/20D changes, VWAP, entry/stop/target references, risk, RSI and volume evidence.
+- Reports contain market regime, coverage, top daily delivery/swing candidates and separate intraday-confirmed candidates in each price band, company/exchange, latest completed 5-minute candle close, daily model score, intraday score, 1D/5D/20D changes, VWAP, entry/stop/target references, risk, RSI and volume evidence.
 - Positive/negative moves use green/red icons. Telegram does not support arbitrary HTML text colours.
 
 ## Market-data limitations
