@@ -153,13 +153,10 @@ def run_scan(limit=250, min_score=60, news_limit=6, workers=6):
     if limit not in (250, 500):
         raise ValueError("Choose 250 or 500")
 
-    # Gate before even refreshing the stock universe.
+    # Intraday signals are session-gated; daily delivery research can run
+    # outside market hours using completed daily candles only.
     market_session = get_market_status()
-    if market_session.get("phase") != "open":
-        return _empty_result(
-            market_session,
-            "The NSE cash-equity session is not open. No stock scan was run.",
-        )
+    delivery_only = market_session.get("phase") != "open"
 
     universe, universe_refresh_errors = ensure_exchange_universes()
     if universe.empty:
@@ -255,6 +252,52 @@ def run_scan(limit=250, min_score=60, news_limit=6, workers=6):
         & (base["setup_status"] == "Watchlist candidate")
     ].copy()
 
+    # Delivery candidates use completed daily data and do not depend on 5m confirmation.
+    delivery_low = daily_eligible[daily_eligible["price"] <= 1000].sort_values(
+        "score", ascending=False
+    ).head(5).reset_index(drop=True)
+    delivery_high = daily_eligible[daily_eligible["price"] > 1000].sort_values(
+        "score", ascending=False
+    ).head(5).reset_index(drop=True)
+    delivery_picks = pd.concat([delivery_low, delivery_high], ignore_index=True)
+    if not delivery_picks.empty:
+        save_daily_picks(delivery_picks, histories, market["regime"])
+
+    delivery_meta = {
+        "market": market,
+        "universe_count": len(universe),
+        "selected_count": len(selected),
+        "success_count": len(downloaded),
+        "scored_count": len(base),
+        "candidate_count": len(daily_eligible),
+        "excluded_count": int((~base["eligible"].astype(bool)).sum()),
+        "data_date": str(base["data_date"].max()),
+        "news_count": news_bundle["total_items"],
+        "news_sources_working": news_bundle["working_sources"],
+        "news_sources_total": news_bundle["total_sources"],
+        "news_source_status": news_bundle["source_status"],
+        "global_news": news_bundle["global_news"][:6],
+        "official_news": news_bundle["official_news"][:10],
+        "benchmarks": market.get("benchmarks", {}),
+        "nse_selected": int((selected["exchange"].astype(str).str.upper() == "NSE").sum()),
+        "bse_selected": int((selected["exchange"].astype(str).str.upper() == "BSE").sum()),
+        "nse_universe_count": nse_universe_count,
+        "bse_universe_count": bse_universe_count,
+        "nse_refresh_error": nse_refresh_error,
+        "bse_refresh_error": bse_refresh_error,
+        "delivery_low": delivery_low,
+        "delivery_high": delivery_high,
+        "delivery_only": delivery_only,
+    }
+
+    if delivery_only:
+        return {
+            "market_session": market_session,
+            "live_ready": False,
+            "live_error": "Market is closed; intraday confirmation is intentionally disabled.",
+            **delivery_meta,
+        }
+
     # Select up to 18 daily leaders in each close-price band before downloading
     # intraday data. The final band is determined from the latest 5m close.
     low_pre = daily_eligible[daily_eligible["price"] <= 1000].sort_values(
@@ -295,6 +338,7 @@ def run_scan(limit=250, min_score=60, news_limit=6, workers=6):
             universe_count=len(universe),
             selected_count=len(selected),
             success_count=len(downloaded),
+            **delivery_meta,
         )
 
     nifty_prev_close = _previous_nifty_close(session_date)
@@ -304,6 +348,7 @@ def run_scan(limit=250, min_score=60, news_limit=6, workers=6):
             "Could not determine previous completed Nifty close; relative-strength check is unavailable.",
             live_provider=YAHOO_INTRADAY_PROVIDER,
             market=market,
+            **delivery_meta,
         )
 
     nifty_candle_price = float(nifty_intraday["snapshot"]["price"])
@@ -412,4 +457,8 @@ def run_scan(limit=250, min_score=60, news_limit=6, workers=6):
         "nse_refresh_error": nse_refresh_error,
         "bse_refresh_error": bse_refresh_error,
         "bse_live_supported": True,
+        "delivery_low": delivery_low,
+        "delivery_high": delivery_high,
+        "delivery_only": False,
+        "delivery_candidate_count": len(delivery_picks),
     }
