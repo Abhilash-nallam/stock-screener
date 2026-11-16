@@ -368,6 +368,7 @@ def run_scan(limit=250, min_score=60, news_limit=6, workers=6):
             "Latest completed Nifty 5-minute candle is older than 10 minutes. No recommendations were generated.",
             live_provider=YAHOO_INTRADAY_PROVIDER,
             market=market,
+            **delivery_meta,
         )
 
     live_rows = []
