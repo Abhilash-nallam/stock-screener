@@ -64,6 +64,15 @@ Create a fine-grained personal access token in GitHub:
 - Metadata read is automatically included.
 Store this value only as Cloudflare Worker secret `GITHUB_ACTIONS_TOKEN`. Do not add it to repository source.
 
+### Enable the automatic 09:45 IST scan (optional)
+
+After deploying the latest `cloudflare/telegram-worker.js`, open **Workers & Pages → your Worker → Settings → Triggers → Cron Triggers → Add Cron Trigger** and enter:
+
+- Cron expression: `15 4 * * 1-5` (04:15 UTC = 09:45 IST, Monday–Friday).
+- Save the trigger.
+
+Cloudflare runs scheduled events in UTC. This weekday trigger can still fire on an Indian exchange holiday; the Python market clock will block intraday recommendations and return a closed-market daily research report instead. Check the first scheduled run in Cloudflare Worker logs and Telegram before relying on it. The Cron Trigger is not active just because the source code has been updated.
+
 ### Register the Telegram webhook once
 On Windows PowerShell, replace the two placeholders and run:
 ```powershell
@@ -148,7 +157,7 @@ Streamlit is optional and only hosts the visual dashboard. The Telegram workflow
 - Pre-market candidates are research watchlists, not buy signals. This feed does not currently ingest the exchange/broker pre-open indicative equilibrium price and quantity. Therefore it cannot truthfully label a stock as an actual gap-up or gap-down before an opening price is available.
 - Once the market opens and the scanner has valid intraday data, the report separately classifies observed opening gaps: at least +0.50% as gap-up and at most -0.50% as gap-down, measured from the session open against the previous completed daily close. The gap list is a researched shortlist, not the entire exchange.
 - The intraday confirmation layer still requires six consecutive completed 5-minute candles, expanding volume, a fresh provider timestamp, price above VWAP, positive momentum, and Nifty time alignment. On a normal session, this is usually no earlier than about 09:45 IST.
-- **The 09:45 handoff is not currently scheduled automatically.** Send `/fetch 250` or `/fetch 500` again around 09:45 IST to run intraday confirmation. The current GitHub workflow is manual-dispatch only; no automatic recurring scan has been enabled.
+- The Worker source now includes a scheduled 09:45 IST opening-confirmation dispatch for a 500-stock scan. It only becomes active after the updated Worker is deployed and a Cloudflare Cron Trigger is configured with `15 4 * * 1-5` (UTC). Until that one-time Cloudflare setup is complete, manually send `/fetch 250` or `/fetch 500` again around 09:45 IST. The scheduled run rechecks the same daily rotating universe; it does not place orders.
 
 ## Zero-cost market-open intraday mode (no Groww subscription required)
 
