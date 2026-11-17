@@ -141,6 +141,15 @@ The score is a transparent heuristic ranking, not a calibrated probability of pr
 Streamlit is optional and only hosts the visual dashboard. The Telegram workflow does not pass through Streamlit: Telegram -> Cloudflare Worker -> GitHub Actions -> Python scanner -> Telegram. GitHub Actions runs a temporary cloud runner only when a Telegram command dispatches a job.
 
 
+## Pre-market preparation and opening-gap process
+
+- Running `/fetch 250` or `/fetch 500` before 09:15 IST produces a dedicated pre-market preparation report using the previous completed daily session only. During the 09:00–09:15 pre-open phase it still does not treat indicative prices as confirmed trades.
+- The report shows previous close, previous-session high/low, 20-session support/resistance references, prior-session volume versus its prior-20-session median, daily momentum/trend, company headline context, and timestamped global/official headlines published within the last 24 hours.
+- Pre-market candidates are research watchlists, not buy signals. This feed does not currently ingest the exchange/broker pre-open indicative equilibrium price and quantity. Therefore it cannot truthfully label a stock as an actual gap-up or gap-down before an opening price is available.
+- Once the market opens and the scanner has valid intraday data, the report separately classifies observed opening gaps: at least +0.50% as gap-up and at most -0.50% as gap-down, measured from the session open against the previous completed daily close. The gap list is a researched shortlist, not the entire exchange.
+- The intraday confirmation layer still requires six consecutive completed 5-minute candles, expanding volume, a fresh provider timestamp, price above VWAP, positive momentum, and Nifty time alignment. On a normal session, this is usually no earlier than about 09:45 IST.
+- **The 09:45 handoff is not currently scheduled automatically.** Send `/fetch 250` or `/fetch 500` again around 09:45 IST to run intraday confirmation. The current GitHub workflow is manual-dispatch only; no automatic recurring scan has been enabled.
+
 ## Zero-cost market-open intraday mode (no Groww subscription required)
 
 The default Telegram scan uses Yahoo Finance's public 5-minute chart data for NSE `.NS` and BSE `.BO` tickers. It does not call Groww live-data endpoints, broker order APIs, or any paid market-data API. The Groww API key/secret entries in GitHub Actions are not used by this zero-cost scanner and may be removed from repository secrets. Do not share them.
