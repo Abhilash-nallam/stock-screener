@@ -398,6 +398,13 @@ def run_scan(limit=250, min_score=60, news_limit=6, workers=6):
             ["live_score", "score"], ascending=False
         ).head(5).reset_index(drop=True)
 
+    gap_up = live_frame[
+        pd.to_numeric(live_frame.get("live_gap_pct"), errors="coerce") >= 0.5
+    ].sort_values(["live_gap_pct", "score"], ascending=False).head(10).reset_index(drop=True) if not live_frame.empty else pd.DataFrame()
+    gap_down = live_frame[
+        pd.to_numeric(live_frame.get("live_gap_pct"), errors="coerce") <= -0.5
+    ].sort_values(["live_gap_pct", "score"], ascending=True).head(10).reset_index(drop=True) if not live_frame.empty else pd.DataFrame()
+
     confirmed_picks = pd.concat([low, high], ignore_index=True)
     if not confirmed_picks.empty:
         # Persist selected daily baselines for later performance tracking.
@@ -450,6 +457,8 @@ def run_scan(limit=250, min_score=60, news_limit=6, workers=6):
         "excluded_count": int((~base["eligible"].astype(bool)).sum()),
         "low": low,
         "high": high,
+        "gap_up": gap_up,
+        "gap_down": gap_down,
         "data_date": str(base["data_date"].max()),
         "news_count": news_bundle["total_items"],
         "news_sources_working": news_bundle["working_sources"],
