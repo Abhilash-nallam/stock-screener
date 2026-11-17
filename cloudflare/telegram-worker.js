@@ -296,6 +296,33 @@ async function registerWebhook(request, env) {
 }
 
 export default {
+  async scheduled(controller, env, ctx) {
+    const chatId = String(env.TELEGRAM_CHAT_ID || "");
+    if (!chatId || !env.GITHUB_ACTIONS_TOKEN) {
+      console.error("Scheduled radar scan skipped: Telegram chat ID or GitHub Actions token is missing.");
+      return;
+    }
+    const task = (async () => {
+      try {
+        await dispatchJob(env, chatId, "scan", "500");
+        await sendMessage(
+          env,
+          chatId,
+          "⏰ <b>09:45 IST OPENING CONFIRMATION SCAN QUEUED</b>\nThe scanner is rechecking the rotating 500-stock NSE+BSE sample with completed 5-minute candles. It will report observed opening gaps and only candidates that pass the intraday confirmation gates. This is a watchlist, not an order."
+        );
+      } catch (error) {
+        console.error("Scheduled radar scan failed:", error.message);
+        try {
+          await sendMessage(env, chatId, "⚠️ Automatic 09:45 IST radar scan could not be queued. Check Cloudflare Worker logs and the GitHub Actions token.");
+        } catch (notifyError) {
+          console.error("Could not notify Telegram about scheduled scan failure:", notifyError.message);
+        }
+        throw error;
+      }
+    })();
+    ctx.waitUntil(task);
+  },
+
   async fetch(request, env) {
     const url = new URL(request.url);
 
