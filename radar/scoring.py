@@ -119,6 +119,11 @@ def score_stock(meta,history,market=None):
     high55=float(c.tail(min(55,len(c))).max())
     distance_high=(last/high55-1)*100 if high55 else 0
     breakout=90 if distance_high>=-2 else 75 if distance_high>=-5 else 55 if distance_high>=-10 else 30
+    previous_high=float(h.High.iloc[-1])
+    previous_low=float(h.Low.iloc[-1])
+    support_20d=float(h.Low.tail(min(20,len(h))).min())
+    resistance_20d=float(h.High.tail(min(20,len(h))).max())
+    previous_session_direction="UP" if last>prev else "DOWN" if last<prev else "FLAT"
     regime=str(market.get("regime","unknown")).lower()
     global_risk=str(market.get("global_risk","unknown")).lower()
     market_score={"bullish":90,"mixed":55,"bearish":15}.get(regime,45)
@@ -179,5 +184,9 @@ def score_stock(meta,history,market=None):
       "score":round(_clip(base),1),"base_score":round(_clip(base),1),"risk":risk,"eligible":eligible,
       "setup_status":setup,"entry_low":round(entry_low,2),"entry_high":round(entry_high,2),"stop_loss":round(stop,2),
       "target1":round(target1,2),"target2":round(target2,2),"age_days":age,"data_date":str(date.date()),
+      "previous_close":round(last,2),"previous_session_high":round(previous_high,2),
+      "previous_session_low":round(previous_low,2),"support_20d":round(support_20d,2),
+      "resistance_20d":round(resistance_20d,2),"previous_session_direction":previous_session_direction,
+      "previous_session_volume_ratio":round(rvol,2) if np.isfinite(rvol) else None,
       **{k:round(float(x),1) if x is not None else None for k,x in parts.items()},
       "news_score":None,"news_adjustment":0.0,"news_flags":[],"reasons":reasons,"flags":flags,"news":[]}
