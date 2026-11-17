@@ -28,6 +28,10 @@ class RecommendationScoringTests(unittest.TestCase):
         self.assertGreater(scored["target1"], scored["price"])
         self.assertGreater(scored["target2"], scored["target1"])
         self.assertIn("relative_strength_score", scored)
+        self.assertEqual(scored["previous_close"], scored["price"])
+        self.assertGreaterEqual(scored["previous_session_high"], scored["previous_session_low"])
+        self.assertGreaterEqual(scored["resistance_20d"], scored["support_20d"])
+        self.assertGreaterEqual(scored["previous_session_volume_ratio"], 0)
 
     def test_stale_data_is_rejected(self):
         scored = score_stock({"symbol": "TEST"}, synthetic_history(stale_days=9),
