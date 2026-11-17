@@ -76,18 +76,21 @@ class TelegramFormattingTests(unittest.TestCase):
             "high": pd.DataFrame(columns=["symbol"]),
         }
         messages = format_scan_messages(result)
-        self.assertEqual(len(messages), 7)
+        self.assertEqual(len(messages), 8)
         self.assertIn("FREE INTRADAY SCAN", messages[0])
         self.assertIn("GLOBAL EQUITY MARKETS", messages[1])
         self.assertIn("RELEVANT NEWS", messages[2])
         self.assertIn("DELIVERY / SWING WATCHLIST", messages[3])
         self.assertIn("DELIVERY / SWING WATCHLIST", messages[4])
-        self.assertIn("INTRADAY-CONFIRMED", messages[5])
+        self.assertIn("OPENING GAP CLASSIFICATION", messages[5])
+        self.assertIn("OBSERVED GAP-UP", messages[5])
+        self.assertIn("OBSERVED GAP-DOWN", messages[5])
         self.assertIn("INTRADAY-CONFIRMED", messages[6])
+        self.assertIn("INTRADAY-CONFIRMED", messages[7])
         joined = "\n".join(messages)
         self.assertNotIn("\\n", joined)
         self.assertTrue(all(len(message) <= 4096 for message in messages))
-        self.assertIn("LOW", messages[5])
+        self.assertIn("LOW", messages[6])
 
 
     def test_closed_market_report_shows_daily_delivery_candidates(self):
@@ -112,6 +115,20 @@ class TelegramFormattingTests(unittest.TestCase):
         self.assertIn("Daily score", messages[1])
         self.assertIn("not an intraday buy signal", messages[1])
         self.assertIn("No candidate passed", messages[2])
+
+
+    def test_opening_gap_classification_uses_measured_open_gap(self):
+        from telegram_bot import _opening_gap_message
+        result = {
+            "gap_up": pd.DataFrame([{"symbol": "UP", "company": "Up Co", "live_gap_pct": 2.1, "live_price": 102, "score": 82, "live_status": "WAIT"}]),
+            "gap_down": pd.DataFrame([{"symbol": "DOWN", "company": "Down Co", "live_gap_pct": -1.4, "live_price": 98, "score": 75, "live_status": "WAIT"}]),
+        }
+        message = _opening_gap_message(result)
+        self.assertIn("measured from the session open", message)
+        self.assertIn("UP", message)
+        self.assertIn("DOWN", message)
+        self.assertIn("2.10%", message)
+        self.assertIn("-1.40%", message)
 
 if __name__ == "__main__":
     unittest.main()
