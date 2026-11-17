@@ -204,10 +204,12 @@ def _delivery_card(row, rank):
     flags = _as_list(row.get("news_flags"))
     lines = [
         f"<b>{rank}. {symbol} — {company}</b> ({exchange})",
-        f"💰 <b>Latest completed daily close:</b> {_money(row.get('price'))} · <b>Daily score:</b> {_number(row.get('score'))}/100",
+        f"💰 <b>Previous close:</b> {_money(row.get('previous_close', row.get('price')))} · <b>Daily score:</b> {_number(row.get('score'))}/100",
+        f"📊 <b>Previous session:</b> High {_money(row.get('previous_session_high'))} · Low {_money(row.get('previous_session_low'))} · Direction {html.escape(str(row.get('previous_session_direction', 'n/a')))}",
+        f"🧱 <b>Reference levels:</b> Support (20D low) {_money(row.get('support_20d'))} · Resistance (20D high) {_money(row.get('resistance_20d'))}",
         f"📈 <b>Returns:</b> 1D {_pct(row.get('change_1d_pct'))} · 5D {_pct(row.get('ret5_pct'))} · 20D {_pct(row.get('ret20_pct'))} · 60D {_pct(row.get('ret60_pct'))}",
         f"🧭 <b>Trend:</b> RSI {_number(row.get('rsi'))} · ADX {_number(row.get('adx'))} · 55D high distance {_pct(row.get('distance_55d_high_pct'))}",
-        f"💧 <b>Liquidity:</b> median 20D turnover {_money(row.get('turnover20'))} · relative volume {_number(row.get('rvol'), 2)}",
+        f"💧 <b>Liquidity:</b> median 20D turnover {_money(row.get('turnover20'))} · previous-session volume / prior 20D median {_number(row.get('previous_session_volume_ratio', row.get('rvol')), 2)}x",
         f"🎯 <b>Daily reference zone:</b> {_money(row.get('entry_low'))} – {_money(row.get('entry_high'))}",
         f"🛑 <b>Stop reference:</b> {_money(row.get('stop_loss'))} · <b>Targets:</b> T1 {_money(row.get('target1'))} · T2 {_money(row.get('target2'))}",
         f"⚠️ <b>Risk:</b> {_risk(row.get('risk'))} · <b>Data date:</b> {html.escape(str(row.get('data_date', 'n/a')))}",
@@ -260,15 +262,45 @@ def format_scan_messages(result):
     )
     if phase != "open":
         if result.get("delivery_low") is not None or result.get("delivery_high") is not None:
+            is_premarket = phase in ("pre_market", "pre_open")
+            title = "PRE-MARKET PREPARATION REPORT" if is_premarket else "DAILY DELIVERY / SWING RESEARCH"
             header = (
-                "<b>🇮🇳 INDIA STOCK RADAR — DAILY DELIVERY RESEARCH</b>\n"
-                f"🗓 Market status: <b>{html.escape(phase.upper())}</b> · {html.escape(str(session.get('local_date', '')))}\n"
-                f"📚 Daily data through: <b>{html.escape(str(result.get('data_date') or 'unavailable'))}</b>\n"
+                f"<b>🇮🇳 INDIA STOCK RADAR — {title}</b>\n"
+                f"🗓 Market status: <b>{html.escape(phase.upper())}</b> · {html.escape(str(session.get('local_date', '')))} IST\n"
+                f"📚 Previous completed daily data through: <b>{html.escape(str(result.get('data_date') or 'unavailable'))}</b>\n"
                 f"🔎 Scanned: {result.get('success_count', 0)}/{result.get('selected_count', 0)} usable histories · "
                 f"{result.get('candidate_count', 0)} daily candidates\n"
-                "<i>Intraday confirmation is unavailable while the market is closed. These are research watchlists, not buy calls.</i>"
+                "<i>PRE-MARKET WATCHLIST — NOT A BUY SIGNAL. Today's opening gap is not confirmed until opening/pre-open indicative prices are available. Intraday confirmation starts only after completed 5-minute candles pass all checks.</i>"
             )
-            return [header] + delivery_sections
+            report = [header]
+            if is_premarket:
+                overnight = ["<b>🌙 OVERNIGHT NEWS & OFFICIAL ANNOUNCEMENTS</b>"]
+                for label, key in (("Global market / macro", "global_news"), ("Indian exchanges / regulators", "official_news")):
+                    items = _as_list(result.get(key))[:5]
+                    overnight.append(f"\n<b>{label}</b>")
+                    if not items:
+                        overnight.append("⚪ No timestamped headlines returned by configured feeds.")
+                        continue
+                    for item in items:
+                        headline = html.escape(str(item.get("title") or "")[:160])
+                        source = html.escape(str(item.get("publisher") or item.get("source") or "Source"))
+                        published = html.escape(_headline_date(item))
+                        link = str(item.get("link") or "")
+                        if link.startswith(("https://", "http://")):
+                            overnight.append(f"• <a href=\"{html.escape(link, quote=True)}\">{headline}</a> — {source} · {published}")
+                        else:
+                            overnight.append(f"• {headline} — {source} · {published}")
+                report.append("\n".join(overnight))
+            report.extend(delivery_sections)
+            if is_premarket:
+                report.append(
+                    "<b>⏱ OPENING CHECKPOINTS</b>\n"
+                    "• 09:00–09:08 IST: observe pre-open indicative price/quantity in your broker or exchange terminal.\n"
+                    "• 09:15 IST onward: compare actual first traded/open price with previous close to classify a gap.\n"
+                    "• Around 09:45 IST or later: run /fetch again for completed-5m intraday confirmation.\n"
+                    "• Do not chase a gap; verify liquidity, spreads, news and risk first."
+                )
+            return report
         from radar.market_clock import format_market_status
         return [format_market_status(session)]
 
