@@ -110,7 +110,7 @@ class TelegramFormattingTests(unittest.TestCase):
             "delivery_high": pd.DataFrame(columns=["symbol"]),
         }
         messages = format_scan_messages(result)
-        self.assertIn("DAILY DELIVERY RESEARCH", messages[0])
+        self.assertIn("DAILY DELIVERY / SWING RESEARCH", messages[0])
         self.assertIn("DELIVERY", messages[1])
         self.assertIn("Daily score", messages[1])
         self.assertIn("not an intraday buy signal", messages[1])
@@ -124,11 +124,35 @@ class TelegramFormattingTests(unittest.TestCase):
             "gap_down": pd.DataFrame([{"symbol": "DOWN", "company": "Down Co", "live_gap_pct": -1.4, "live_price": 98, "score": 75, "live_status": "WAIT"}]),
         }
         message = _opening_gap_message(result)
-        self.assertIn("measured from the session open", message)
+        self.assertIn("Measured from the session open", message)
         self.assertIn("UP", message)
         self.assertIn("DOWN", message)
         self.assertIn("2.10%", message)
         self.assertIn("-1.40%", message)
+
+
+    def test_premarket_report_labels_watchlist_and_opening_gap_as_unconfirmed(self):
+        result = {
+            "market_session": {"phase": "pre_market", "local_date": "2026-11-18"},
+            "data_date": "2026-11-17", "success_count": 240, "selected_count": 250,
+            "candidate_count": 4, "global_news": [{
+                "title": "Global markets rise", "publisher": "Example", "age_hours": 2,
+                "published": "2026-11-18T02:00:00+00:00", "link": "https://example.com/news",
+            }],
+            "official_news": [{
+                "title": "NSE filing", "publisher": "NSE", "age_hours": 30,
+                "published": "2026-11-17T16:00:00+00:00", "link": "https://example.com/filing",
+            }],
+            "delivery_low": pd.DataFrame(columns=["symbol"]),
+            "delivery_high": pd.DataFrame(columns=["symbol"]),
+        }
+        messages = format_scan_messages(result)
+        self.assertIn("PRE-MARKET PREPARATION REPORT", messages[0])
+        self.assertIn("PRE-MARKET WATCHLIST — NOT A BUY SIGNAL", messages[0])
+        self.assertIn("OVERNIGHT NEWS", messages[1])
+        self.assertIn("Global markets rise", messages[1])
+        self.assertNotIn("NSE filing", messages[1])
+        self.assertIn("OPENING CHECKPOINTS", messages[-1])
 
 if __name__ == "__main__":
     unittest.main()
