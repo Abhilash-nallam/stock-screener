@@ -252,6 +252,34 @@ def _delivery_bucket_messages(title, rows):
     return messages
 
 
+def _opening_gap_message(result):
+    """Show measured opening gaps only after an actual session open price exists."""
+    groups = [
+        ("🟢 OBSERVED GAP-UP WATCHLIST (≥ +0.50%)", result.get("gap_up")),
+        ("🔴 OBSERVED GAP-DOWN WATCHLIST (≤ −0.50%)", result.get("gap_down")),
+    ]
+    lines = [
+        "<b>📍 OPENING GAP CLASSIFICATION</b>",
+        "<i>Measured from the session open price versus previous completed daily close; not a pre-market prediction. Gap candidates are not automatically buy/sell calls.</i>",
+    ]
+    for title, rows in groups:
+        lines.append(f"\n<b>{title}</b>")
+        if rows is None or rows.empty:
+            lines.append("⚪ No stocks in this gap band among the researched intraday shortlist.")
+            continue
+        for _, row in rows.head(5).iterrows():
+            symbol = html.escape(str(row.get("symbol", "—")))
+            company = html.escape(str(row.get("company", "—")))
+            gap = _pct(row.get("live_gap_pct"))
+            lines.append(
+                f"• <b>{symbol} — {company}</b>: opening gap {gap} · "
+                f"open reference {_money(row.get('live_price'))} · "
+                f"daily score {_number(row.get('score'))}/100 · "
+                f"{html.escape(str(row.get('live_status', 'Unconfirmed'))[:90])}"
+            )
+    return "\n".join(lines)
+
+
 def format_scan_messages(result):
     """Format market state or a live-confirmed report; never call daily-only picks live."""
     session = result.get("market_session") or {}
@@ -416,6 +444,7 @@ def format_scan_messages(result):
     messages.append("\n".join(headline_lines))
 
     messages.extend(delivery_sections)
+    messages.append(_opening_gap_message(result))
     messages.extend(_bucket_messages("🟢 INTRADAY-CONFIRMED CANDIDATES — PRICE ≤ ₹1,000", result["low"]))
     messages.extend(_bucket_messages("🔵 INTRADAY-CONFIRMED CANDIDATES — PRICE > ₹1,000", result["high"]))
     return messages
