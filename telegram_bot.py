@@ -304,8 +304,12 @@ def format_scan_messages(result):
             if is_premarket:
                 overnight = ["<b>🌙 OVERNIGHT NEWS & OFFICIAL ANNOUNCEMENTS</b>"]
                 for label, key in (("Global market / macro", "global_news"), ("Indian exchanges / regulators", "official_news")):
-                    items = _as_list(result.get(key))[:5]
-                    overnight.append(f"\n<b>{label}</b>")
+                    items = [
+                        item for item in _as_list(result.get(key))
+                        if item.get("age_hours") is not None
+                        and 0 <= float(item.get("age_hours")) <= 24
+                    ][:5]
+                    overnight.append(f"\n<b>{label} — published in the last 24h</b>")
                     if not items:
                         overnight.append("⚪ No timestamped headlines returned by configured feeds.")
                         continue
