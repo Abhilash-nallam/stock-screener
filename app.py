@@ -1,5 +1,5 @@
-import hmac
-import os
+import re
+from html import unescape
 
 import pandas as pd
 import plotly.express as px
@@ -21,7 +21,13 @@ st.set_page_config(
 st.markdown(
     """
     <style>
-      .block-container {padding-top: 1.4rem; padding-bottom: 2.5rem; max-width: 1600px;}
+      .block-container {padding-top: 1.2rem; padding-bottom: 2.5rem; max-width: 1680px;}
+      [data-testid="stSidebar"] {border-right: 1px solid rgba(128,128,128,.18);}
+      h1 {letter-spacing: -.035em; font-weight: 750;}
+      h2, h3 {letter-spacing: -.02em;}
+      div.stButton > button[kind="primary"] {border-radius: 10px; min-height: 2.8rem; font-weight: 650;}
+      div.stButton > button {border-radius: 9px;}
+      [data-testid="stTabs"] button {font-weight: 600;}
       [data-testid="stMetric"] {background: rgba(128,128,128,.07); border: 1px solid rgba(128,128,128,.16); padding: 13px 15px; border-radius: 12px;}
       [data-testid="stMetricLabel"] {font-size: .82rem;}
       div[data-testid="stDataFrame"] {border: 1px solid rgba(128,128,128,.18); border-radius: 10px;}
@@ -41,25 +47,9 @@ with st.sidebar:
     min_score = st.slider("Minimum daily score", 0, 100, 60)
     news_limit = st.slider("Headlines per leading stock", 3, 10, 6)
 
-    dashboard_password = os.getenv("RADAR_DASHBOARD_PASSWORD", "").strip()
-    try:
-        dashboard_password = dashboard_password or str(
-            st.secrets.get("RADAR_DASHBOARD_PASSWORD", "")
-        ).strip()
-    except Exception:
-        pass
-    entered_password = st.text_input("Private dashboard password", type="password")
-    admin_enabled = bool(
-        dashboard_password
-        and entered_password
-        and hmac.compare_digest(entered_password, dashboard_password)
-    )
-    if admin_enabled:
-        st.success("Private scan controls unlocked for this session.")
-    elif dashboard_password:
-        st.caption("Enter the configured password to enable manual scans.")
-    else:
-        st.caption("Read-only mode. Configure RADAR_DASHBOARD_PASSWORD to enable manual scans.")
+    # Public dashboard: scans and public exchange-list refresh are open to all visitors.
+    admin_enabled = True
+    st.success("Public access · scans enabled")
 
     st.divider()
     st.subheader("Exchange universes")
@@ -68,28 +58,25 @@ with st.sidebar:
     nse_col.metric("NSE cached", f"{counts['nse']:,}")
     bse_col.metric("BSE cached", f"{counts['bse']:,}")
     st.caption(f"Combined cached securities: {counts['combined']:,}")
-    if admin_enabled:
-        if st.button("Refresh NSE + BSE", use_container_width=True):
-            with st.spinner("Refreshing public exchange lists..."):
-                refresh_result = refresh_both()
-            for name in ("nse", "bse"):
-                if name in refresh_result["refreshed"]:
-                    st.success(f"{name.upper()}: {refresh_result['refreshed'][name]['count']:,} securities")
-                elif name in refresh_result["errors"]:
-                    st.warning(f"{name.upper()} refresh failed: {refresh_result['errors'][name]}")
-        left, right = st.columns(2)
-        if left.button("Refresh NSE", use_container_width=True):
-            try:
-                st.success(f"NSE refreshed: {refresh_exchange('nse')['count']:,}")
-            except Exception as exc:
-                st.error(f"NSE refresh failed: {exc}")
-        if right.button("Refresh BSE", use_container_width=True):
-            try:
-                st.success(f"BSE refreshed: {refresh_exchange('bse')['count']:,}")
-            except Exception as exc:
-                st.error(f"BSE refresh failed: {exc}")
-    else:
-        st.caption("Universe refresh is disabled in public read-only mode.")
+    if st.button("Refresh NSE + BSE", use_container_width=True):
+        with st.spinner("Refreshing public exchange lists..."):
+            refresh_result = refresh_both()
+        for name in ("nse", "bse"):
+            if name in refresh_result["refreshed"]:
+                st.success(f"{name.upper()}: {refresh_result['refreshed'][name]['count']:,} securities")
+            elif name in refresh_result["errors"]:
+                st.warning(f"{name.upper()} refresh failed: {refresh_result['errors'][name]}")
+    left, right = st.columns(2)
+    if left.button("Refresh NSE", use_container_width=True):
+        try:
+            st.success(f"NSE refreshed: {refresh_exchange('nse')['count']:,}")
+        except Exception as exc:
+            st.error(f"NSE refresh failed: {exc}")
+    if right.button("Refresh BSE", use_container_width=True):
+        try:
+            st.success(f"BSE refreshed: {refresh_exchange('bse')['count']:,}")
+        except Exception as exc:
+            st.error(f"BSE refresh failed: {exc}")
 
     st.divider()
     st.caption("Yahoo Finance is an unofficial, potentially delayed data source. Verify live quotes and bid/ask in your broker before acting.")
@@ -99,7 +86,7 @@ phase = str(session_now.get("phase", "unknown"))
 if phase == "open":
     st.success(f"🟢 NSE cash market open · {session_now.get('local_time', 'n/a')} IST")
 else:
-    st.info(format_market_status(session_now))
+    st.info(unescape(re.sub(r"</?b>", "", format_market_status(session_now))))
 
 st.warning(
     "Risk notice: daily prices and completed 5-minute candles from Yahoo Finance are not guaranteed live exchange quotes. "
@@ -115,8 +102,7 @@ with scan_col:
         disabled=not admin_enabled,
     )
 with status_col:
-    if not admin_enabled:
-        st.caption("Manual scans require the private dashboard password. Telegram scanning remains separate.")
+    st.caption("Free public access · manual scans are enabled. Telegram scanning remains available separately.")
 
 if scan_clicked:
     progress = st.progress(0, text=f"Starting {scan_size}-stock research scan...")
