@@ -201,8 +201,6 @@ async function handleMessage(env, message) {
     await showMenu(env, chatId, true);
   } else if (command === "/help") {
     await showSupport(env, chatId);
-  } else if (command === "/menu") {
-    await showMenu(env, chatId, true);
   } else if (command === "/scan" || command === "/fetch") {
     if (parts.length === 1) {
       await showMenu(env, chatId, false);
@@ -223,7 +221,7 @@ async function handleMessage(env, message) {
   } else if (command === "/status" || command === "/universe") {
     await queueJob(env, chatId, "status");
   } else {
-    await sendMessage(env, chatId, "Unknown command. Send /help to see available controls.");
+    await sendMessage(env, chatId, "Unknown command. For technical support, contact @DigitalSupportDesk_Bot.");
   }
 }
 
