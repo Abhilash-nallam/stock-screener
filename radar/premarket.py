@@ -45,6 +45,35 @@ def _history(ticker):
         return pd.Series(dtype=float)
 
 
+def _intraday_quote(ticker, now):
+    """Return a fresh intraday quote; reject stale or undated daily closes."""
+    try:
+        frame = yf.download(
+            ticker, period="1d", interval="1m", auto_adjust=True,
+            progress=False, threads=False, timeout=15,
+        )
+        if frame is None or frame.empty:
+            return None, None
+        if isinstance(frame.columns, pd.MultiIndex):
+            frame.columns = frame.columns.get_level_values(0)
+        if "Close" not in frame:
+            return None, None
+        close = pd.to_numeric(frame["Close"], errors="coerce").dropna()
+        if close.empty:
+            return None, None
+        stamp = pd.Timestamp(close.index[-1])
+        stamp = stamp.tz_localize(IST) if stamp.tzinfo is None else stamp.tz_convert(IST)
+        age_minutes = (now - stamp.to_pydatetime()).total_seconds() / 60.0
+        if age_minutes < -2 or age_minutes > 15:
+            return None, None
+        price = float(close.iloc[-1])
+        if not math.isfinite(price) or price <= 0:
+            return None, None
+        return price, stamp.isoformat(timespec="minutes")
+    except Exception:
+        return None, None
+
+
 def _last_change(series):
     if series is None or len(series) < 2:
         return None
@@ -102,15 +131,18 @@ def build_opening_assessment(indicators, checked_at=None):
         confidence = 0
     else:
         score = sum(value * weight for value, weight in directional) / available_weight
-        if score >= 0.20:
+        coverage = min(1.0, available_weight)
+        separation = min(1.0, abs(score) / 0.75)
+        confidence = round(coverage * separation * 100)
+        # Do not issue a directional bias from one weak or isolated input.
+        if coverage < 0.50:
+            direction = "INSUFFICIENT DATA"
+        elif score >= 0.20:
             direction = "BULLISH BIAS"
         elif score <= -0.20:
             direction = "BEARISH BIAS"
         else:
             direction = "NEUTRAL / MIXED"
-        coverage = min(1.0, available_weight)
-        separation = min(1.0, abs(score) / 0.75)
-        confidence = round(coverage * separation * 100)
 
     vix = indicators.get("INDIA_VIX")
     if vix is None:
@@ -140,7 +172,8 @@ def build_opening_assessment(indicators, checked_at=None):
         "limitations": [
             "Directional score is a heuristic, not a calibrated probability of an up or down open.",
             "Dow, Nasdaq and S&P values are previous completed-session changes, not live US trading.",
-            "GIFT Nifty is shown only when a valid public ticker is configured; Nifty spot is never used as a substitute.",
+            "GIFT Nifty requires a configured, fresh 1-minute quote; stale data and Nifty spot are never substituted.",
+            "A directional bias requires at least 50% of the weighted directional inputs to be available.",
             "Confirmed NSE advances/declines breadth is not assumed available at 09:00.",
         ],
     }
@@ -156,8 +189,6 @@ def fetch_premarket_snapshot(now=None):
 
     tickers = {**GLOBAL_TICKERS, **ASIA_TICKERS, "INDIA_VIX": "^INDIAVIX"}
     gift_symbol = os.getenv("GIFT_NIFTY_YAHOO_SYMBOL", "").strip()
-    if gift_symbol:
-        tickers["GIFT_NIFTY"] = gift_symbol
     histories = _fetch_many(tickers)
 
     indicators = {}
@@ -171,7 +202,7 @@ def fetch_premarket_snapshot(now=None):
             "value": _latest(series),
             "change_pct": round(change, 2) if change is not None else None,
             "status": _direction(change),
-            "source": "Yahoo Finance · previous completed daily session",
+            "source": "Yahoo Finance · latest daily bar; Asian session may still be forming at 09:00 IST",
         })
 
     asia_values = [indicators.get(key) for key in ASIA_TICKERS]
@@ -191,8 +222,9 @@ def fetch_premarket_snapshot(now=None):
         "source": "Yahoo Finance · previous completed daily session",
     })
 
-    gift_series = histories.get("GIFT_NIFTY", pd.Series(dtype=float))
-    gift_value = _latest(gift_series)
+    gift_value, gift_as_of = (
+        _intraday_quote(gift_symbol, current) if gift_symbol else (None, None)
+    )
     nifty_series = _history("^NSEI")
     nifty_close = _latest(nifty_series)
     gift_gap = None
@@ -204,7 +236,11 @@ def fetch_premarket_snapshot(now=None):
         "value": gift_value,
         "change_pct": round(gift_gap, 2) if gift_gap is not None else None,
         "status": _direction(gift_gap),
-        "source": f"Yahoo Finance configured ticker: {gift_symbol}" if gift_symbol else "Unavailable · configure GIFT_NIFTY_YAHOO_SYMBOL",
+        "source": (
+            f"Yahoo Finance 1-minute quote · {gift_as_of}"
+            if gift_value is not None else
+            "Unavailable or stale · configure a verified GIFT_NIFTY_YAHOO_SYMBOL"
+        ),
     })
 
     assessment = build_opening_assessment(indicators, current.isoformat(timespec="minutes"))
