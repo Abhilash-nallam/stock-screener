@@ -23,6 +23,7 @@ const MENU = {
     ],
     [{ text: "🔄 Refresh NSE + BSE", callback_data: "refresh:all" }],
     [{ text: "📋 Universe status", callback_data: "status" }],
+    [{ text: "🌅 Pre-market outlook", callback_data: "premarket" }],
     [{ text: "❔ Help", callback_data: "help" }]
   ]
 };
@@ -90,7 +91,7 @@ async function showSupport(env, chatId) {
 
 async function showMenu(env, chatId, intro = true) {
   const text = intro
-    ? "<b>🇮🇳 INDIA STOCK RADAR</b>\nChoose an action. Scans run on GitHub's cloud runner and the report returns here.\n\nCommands: /fetch 250, /fetch 500, /refresh_nse, /refresh_bse, /refresh_all, /status"
+    ? "<b>🇮🇳 INDIA STOCK RADAR</b>\nChoose an action. Scans run on GitHub's cloud runner and the report returns here.\n\nCommands: /fetch 250, /fetch 500, /premarket, /refresh_nse, /refresh_bse, /refresh_all, /status"
     : "<b>Choose scan size</b>\nSelect how many NSE + BSE stocks to scan.";
   await sendMessage(env, chatId, text, {
     parse_mode: "HTML",
@@ -134,7 +135,8 @@ async function queueJob(env, chatId, command, stockLimit) {
     refresh_nse: "NSE universe refresh",
     refresh_bse: "BSE universe refresh",
     refresh_all: "NSE + BSE universe refresh",
-    status: "universe status check"
+    status: "universe status check",
+    premarket: "pre-market opening assessment"
   };
   await dispatchJob(env, chatId, command, stockLimit);
   await sendMessage(
@@ -186,6 +188,10 @@ async function runAction(env, chatId, action) {
     await queueJob(env, chatId, "status");
     return;
   }
+  if (action === "premarket") {
+    await queueJob(env, chatId, "premarket");
+    return;
+  }
   await sendMessage(env, chatId, "I did not recognise that command. Send /help for controls.");
 }
 
@@ -220,6 +226,8 @@ async function handleMessage(env, message) {
     await queueJob(env, chatId, "refresh_all");
   } else if (command === "/status" || command === "/universe") {
     await queueJob(env, chatId, "status");
+  } else if (command === "/premarket" || command === "/openoutlook") {
+    await queueJob(env, chatId, "premarket");
   } else {
     await sendMessage(env, chatId, "Unknown command. For technical support, contact @DigitalSupportDesk_Bot.");
   }
@@ -287,6 +295,7 @@ async function registerWebhook(request, env) {
       { command: "refresh_bse", description: "Refresh BSE universe" },
       { command: "refresh_all", description: "Refresh both exchange universes" },
       { command: "status", description: "Show cached universe counts" },
+      { command: "premarket", description: "Get pre-market opening outlook" },
       { command: "help", description: "Contact support desk" }
     ]
   });
