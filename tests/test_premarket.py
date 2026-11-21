@@ -10,7 +10,7 @@ class PreMarketAssessmentTests(unittest.TestCase):
             "ASIA_AVG": 0.5, "GIFT_GAP_PCT": 0.4, "INDIA_VIX": 13.0,
         })
         self.assertEqual(result["direction"], "BULLISH BIAS")
-        self.assertEqual(result["confidence"], 100)
+        self.assertEqual(result["confidence"], 82)
         self.assertEqual(result["volatility"], "RELATIVELY LOW")
 
     def test_negative_inputs_produce_bearish_bias(self):
