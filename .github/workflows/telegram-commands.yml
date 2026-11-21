@@ -13,6 +13,7 @@ on:
           - refresh_bse
           - refresh_all
           - status
+          - premarket
       stock_limit:
         description: Number of stocks for scan
         required: true
