@@ -10,6 +10,62 @@ from telegram_bot import format_scan_messages
 from radar.premarket import fetch_premarket_snapshot
 
 
+def format_premarket_message(result):
+    """Format a readable Telegram HTML report using real newline characters."""
+    direction = html.escape(str(result.get("direction", "INSUFFICIENT DATA")))
+    confidence = int(result.get("confidence", 0) or 0)
+    icon = "🟢" if direction == "BULLISH BIAS" else "🔴" if direction == "BEARISH BIAS" else "🟡"
+
+    session_time = str(result.get("session_time_ist", "")).strip()
+    try:
+        hour, minute = (int(part) for part in session_time.split(":", 1))
+        in_premarket_window = (8 * 60 + 30) <= (hour * 60 + minute) <= (9 * 60 + 15)
+    except (TypeError, ValueError):
+        in_premarket_window = False
+
+    title = (
+        "🌅 <b>INDIA STOCK RADAR — PRE-MARKET OUTLOOK</b>"
+        if in_premarket_window
+        else "📊 <b>INDIA STOCK RADAR — MARKET CONTEXT SNAPSHOT</b>"
+    )
+    lines = [
+        title,
+        f"{icon} <b>{direction}</b> · heuristic confidence <b>{confidence}%</b>",
+        f"🕘 Checked: <b>{html.escape(str(result.get('checked_at', 'Unavailable')))}</b>",
+    ]
+    if not in_premarket_window:
+        lines.append("ℹ️ <i>Outside the 08:30–09:15 IST pre-market window; this is context, not a live opening forecast.</i>")
+
+    vix = result.get("india_vix")
+    vix_text = f"{float(vix):.2f}" if vix is not None else "Unavailable"
+    lines.extend([
+        "",
+        f"🇮🇳 <b>India VIX:</b> {vix_text} · {html.escape(str(result.get('volatility', 'UNAVAILABLE')))}",
+        html.escape(str(result.get("risk_note", ""))),
+        "",
+        "<b>GLOBAL / OVERNIGHT INPUTS</b>",
+    ])
+
+    for item in result.get("rows", []):
+        name = html.escape(str(item.get("indicator", "Indicator")))
+        change = item.get("change_pct")
+        change_text = f"{float(change):+.2f}%" if change is not None else "Unavailable"
+        status = html.escape(str(item.get("status", "unavailable")))
+        lines.append(f"• <b>{name}:</b> {change_text} · {status}")
+
+    lines.extend([
+        "",
+        "<b>IMPORTANT</b>",
+        "• GIFT Nifty is unavailable unless a verified, fresh public ticker is configured; Nifty spot is never substituted.",
+        "• Confirmed advances/declines breadth must be checked after 09:15.",
+        "• Confidence is a heuristic data-coverage/separation score, NOT the probability of a bullish or bearish open.",
+        "• Dow/Nasdaq/S&amp;P values represent previous completed sessions; sources may be delayed.",
+        "",
+        "<i>Educational research only. Wait for actual opening price action and completed candles. This is not a buy/sell instruction.</i>",
+    ])
+    return "\n".join(lines)
+
+
 def execute(command, stock_limit, chat_id):
     if command == "scan":
         if stock_limit not in ("250", "500"):
@@ -45,35 +101,12 @@ def execute(command, stock_limit, chat_id):
 
     if command == "premarket":
         result = fetch_premarket_snapshot()
-        direction = html.escape(str(result.get("direction", "INSUFFICIENT DATA")))
-        confidence = int(result.get("confidence", 0) or 0)
-        icon = "🟢" if direction == "BULLISH BIAS" else "🔴" if direction == "BEARISH BIAS" else "🟡"
-        lines = [
-            "<b>🌅 INDIA STOCK RADAR — PRE-MARKET OUTLOOK</b>",
-            f"{icon} <b>{direction}</b> · heuristic confidence {confidence}%",
-            f"🕘 Checked: {html.escape(str(result.get('checked_at', 'n/a')))} IST",
-            f"🇮🇳 India VIX: <b>{result.get('india_vix') if result.get('india_vix') is not None else 'Unavailable'}</b> · {html.escape(str(result.get('volatility', 'UNAVAILABLE')))}",
-            html.escape(str(result.get("risk_note", ""))),
-            "",
-            "<b>GLOBAL / OVERNIGHT INPUTS</b>",
-        ]
-        for item in result.get("rows", []):
-            name = html.escape(str(item.get("indicator", "Indicator")))
-            change = item.get("change_pct")
-            change_text = f"{float(change):+.2f}%" if change is not None else "Unavailable"
-            lines.append(f"• <b>{name}:</b> {change_text} · {html.escape(str(item.get('status', 'unavailable')))}")
-        lines.extend([
-            "",
-            "<b>IMPORTANT</b>",
-            "• GIFT Nifty is unavailable unless a verified public Yahoo ticker is configured; Nifty spot is not substituted.",
-            "• Confirmed advances/declines breadth is checked after 09:15, not assumed at 09:00.",
-            "• Confidence is a heuristic data-coverage/separation score, NOT the probability of a bullish or bearish open.",
-            "• Dow/Nasdaq/S&P are previous completed-session moves; sources may be delayed.",
-            "<i>Educational research only. Wait for actual opening price action and completed candles; this is not a buy/sell instruction.</i>",
-        ])
-        send_telegram("\\n".join(lines), chat_id=chat_id, parse_mode="HTML")
+        send_telegram(
+            format_premarket_message(result),
+            chat_id=chat_id,
+            parse_mode="HTML",
+        )
         return
-
     if command == "status":
         counts = universe_status()
         send_telegram(
