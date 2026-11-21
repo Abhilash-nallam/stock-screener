@@ -9,6 +9,7 @@ from dotenv import load_dotenv
 from radar.ledger import read_ledger
 from radar.scan_service import refresh_both, refresh_exchange, run_scan, universe_status
 from radar.market_clock import format_market_status, get_market_status
+from radar.premarket import fetch_premarket_snapshot
 
 load_dotenv()
 st.set_page_config(
@@ -92,6 +93,37 @@ st.warning(
     "Risk notice: daily prices and completed 5-minute candles from Yahoo Finance are not guaranteed live exchange quotes. "
     "This dashboard is research only; it does not place orders or promise returns."
 )
+
+with st.expander("🌅 9:00 AM Pre-Market Intelligence", expanded=True):
+    st.caption("Overnight global context + India VIX + optional GIFT Nifty reference. A directional bias is not a guaranteed opening prediction.")
+    if st.button("Run pre-market assessment", key="run_premarket", type="primary"):
+        with st.spinner("Fetching global indices, India VIX and available GIFT Nifty reference..."):
+            try:
+                st.session_state["premarket_result"] = fetch_premarket_snapshot()
+            except Exception as exc:
+                st.error(f"Pre-market assessment failed: {exc}")
+    premarket = st.session_state.get("premarket_result")
+    if premarket:
+        direction = premarket.get("direction", "INSUFFICIENT DATA")
+        if direction == "BULLISH BIAS":
+            st.success(f"Opening bias: {direction} · heuristic confidence {premarket.get('confidence', 0)}%")
+        elif direction == "BEARISH BIAS":
+            st.error(f"Opening bias: {direction} · heuristic confidence {premarket.get('confidence', 0)}%")
+        else:
+            st.info(f"Opening bias: {direction} · heuristic confidence {premarket.get('confidence', 0)}%")
+        a, b, d = st.columns(3)
+        a.metric("India VIX", f"{premarket['india_vix']:.2f}" if premarket.get("india_vix") is not None else "Unavailable")
+        b.metric("Volatility regime", premarket.get("volatility", "Unavailable"))
+        d.metric("Directional input coverage", f"{int(premarket.get('available_weight', 0) * 100)}%")
+        rows = premarket.get("rows", [])
+        if rows:
+            st.dataframe(pd.DataFrame(rows), use_container_width=True, hide_index=True)
+        st.info(premarket.get("risk_note", ""))
+        st.caption(f"Checked: {premarket.get('checked_at')} · NSE advances/declines: {premarket.get('breadth_status')}")
+        for limitation in premarket.get("limitations", []):
+            st.caption(f"• {limitation}")
+    else:
+        st.caption("Run this manually around 09:00–09:10 IST. Missing sources are shown as unavailable, never guessed.")
 
 scan_col, status_col = st.columns([1, 2])
 with scan_col:
